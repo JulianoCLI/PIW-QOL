@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.3.0
+// @version      9.3.1
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -357,7 +357,8 @@
         .dex-cell.dex-hidden { display: none !important; }
 
         /* Hunt Analyzer Compact Mode */
-        .ha-window.ha-compact .ha-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 4px !important; }
+        .ha-window.ha-compact { max-width: 280px !important; width: 280px !important; }
+        .ha-window.ha-compact .ha-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 4px !important; }
         .ha-window.ha-compact .ha-card { padding: 4px 8px !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 8px !important; }
         .ha-window.ha-compact .ha-card small { display: none !important; }
         .ha-window.ha-compact .ha-card-ico { font-size: 16px !important; margin: 0 !important; }
@@ -367,15 +368,16 @@
         .ha-window.ha-compact .ha-balance::before { content: 'Balance'; font-weight: bold; }
         .ha-window.ha-compact .ha-rates { gap: 6px !important; padding: 4px !important; font-size: 11px !important; }
         .ha-window.ha-compact .ha-drops-head, .ha-window.ha-compact .ha-note { display: none !important; }
+        .ha-window.ha-compact .ha-clog-btn { display: none !important; }
         .ha-window.ha-compact .ha-drops { display: none !important; }
         .ha-window.ha-compact .ha-drops.show-drops { display: flex !important; max-height: 80px !important; overflow-y: auto !important; padding: 4px !important; }
         
         /* Hunt Analyzer Custom UI */
-        .ha-script-actions { display: flex; justify-content: center; gap: 8px; margin-top: 6px; }
-        .ha-sbtn { background: #1a2d3a; color: #a0aec0; border: 1px solid #2b4c66; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; transition: 0.2s; flex: 1; text-align: center; }
-        .ha-sbtn:hover { background: #3182ce; color: #fff; }
-        .ha-btn-toggle-view { background: transparent; border: none; color: #a0aec0; cursor: pointer; font-size: 14px; margin-right: 8px; padding: 0; }
-        .ha-btn-toggle-view:hover { color: #fff; }
+        .ha-script-actions { display: flex; justify-content: center; gap: 8px; margin-top: 8px; padding: 0 8px 8px 8px; }
+        .ha-sbtn { background: #1a2d3a; color: #a0aec0; border: 1px solid #273f52; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; transition: all 0.15s ease; flex: 1; text-align: center; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .ha-sbtn:hover { background: #3182ce; color: #fff; border-color: #3182ce; }
+        .ha-btn-toggle-view { background: #0c161f; border: 1px solid #273f52; color: #a0aec0; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 8px; padding: 2px 6px; font-weight: bold; transition: all 0.15s; }
+        .ha-btn-toggle-view:hover { color: #fff; border-color: #3182ce; }
 
         /* Compare Modal */
         .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center; }
@@ -1369,12 +1371,13 @@
         if (title && !title.querySelector('.ha-btn-toggle-view')) {
             const toggleBtn = document.createElement('button');
             toggleBtn.className = 'ha-btn-toggle-view';
-            toggleBtn.innerHTML = '◱';
-            toggleBtn.title = 'Alternar Modo Compacto';
+            toggleBtn.innerHTML = haWindow.classList.contains('ha-compact') ? '➕ Maximizar' : '➖ Minimizar';
+            toggleBtn.title = 'Alternar layout reduzido/completo do Analyzer';
             toggleBtn.type = 'button';
             toggleBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                haWindow.classList.toggle('ha-compact');
+                const isCompact = haWindow.classList.toggle('ha-compact');
+                toggleBtn.innerHTML = isCompact ? '➕ Maximizar' : '➖ Minimizar';
             });
             title.insertBefore(toggleBtn, title.querySelector('.ha-clear'));
         }
