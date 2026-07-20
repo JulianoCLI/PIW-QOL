@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.0.5
+// @version      9.1.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -296,6 +296,16 @@
         }
         #dock-btn-quick-tp:hover { background: rgba(49, 130, 206, 0.5); transform: scale(1.08); }
 
+        #dock-btn-quick-shop {
+            background: rgba(214, 158, 46, 0.2);
+            border: 1px solid #d69e2e;
+            color: #ffd700;
+            font-size: 16px; font-weight: bold;
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease;
+        }
+        #dock-btn-quick-shop:hover { background: rgba(214, 158, 46, 0.5); transform: scale(1.08); }
+
         .hunt-drop-tooltip {
             position: absolute; background: #0c161f; border: 1px solid #233e52;
             border-radius: 8px; padding: 10px 14px; z-index: 9999; font-size: 13px;
@@ -459,6 +469,51 @@
             if (mapBtn && mapBtn.nextSibling) gameDock.insertBefore(tpBtn, mapBtn.nextSibling);
             else gameDock.appendChild(tpBtn);
             updateNavButtonAppearance();
+        }
+    }
+
+    function openShopFromAnywhere() {
+        // Estratégia 1: Clicar no botão CTA do market (existe no DOM globalmente)
+        const marketCta = document.querySelector('button.market-cta, .market-cta');
+        if (marketCta) {
+            marketCta.click();
+            return;
+        }
+
+        // Estratégia 2: Procurar botão do NPC "Abrir Loja"
+        const npcBtns = document.querySelectorAll('.npc-dlg-btn');
+        for (const btn of npcBtns) {
+            if (btn.textContent.includes('Loja') || btn.textContent.includes('loja')) {
+                btn.click();
+                return;
+            }
+        }
+
+        // Estratégia 3: Fallback
+        alert('Market não disponível no momento. Tente novamente em alguns segundos.');
+    }
+
+    function injectShopButton() {
+        if (document.getElementById('dock-btn-quick-shop')) return;
+        const gameDock = document.querySelector('nav.game-dock');
+        if (gameDock) {
+            const shopBtn = document.createElement('button');
+            shopBtn.id = 'dock-btn-quick-shop';
+            shopBtn.className = 'dock-btn dock-btn-custom';
+            shopBtn.type = 'button';
+            shopBtn.innerHTML = '🛒';
+            shopBtn.title = 'Abrir Market';
+            shopBtn.addEventListener('click', openShopFromAnywhere);
+
+            // Insere logo após o botão de TP rápido
+            const tpBtn = document.getElementById('dock-btn-quick-tp');
+            if (tpBtn && tpBtn.nextSibling) {
+                gameDock.insertBefore(shopBtn, tpBtn.nextSibling);
+            } else {
+                const mapBtn = gameDock.querySelector('button[data-guide="dock-map"]');
+                if (mapBtn && mapBtn.nextSibling) gameDock.insertBefore(shopBtn, mapBtn.nextSibling);
+                else gameDock.appendChild(shopBtn);
+            }
         }
     }
 
@@ -823,6 +878,7 @@
     let renderTimeout = null;
     const observer = new MutationObserver(() => {
         injectQuickTPButton();
+        injectShopButton();
         injectConfigTab();
         applyChatState();
 
