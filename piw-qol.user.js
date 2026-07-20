@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      8.5
-// @description  Otimização de valor de venda, mod do preview de drops (Hover, ?, Off), filtros por vantagem de tipo (Outland rules), catch rate e expansão universal de tipos via JSON.
+// @version      9.0
+// @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
 // @grant        none
@@ -19,10 +19,12 @@
     const STORAGE_DROP_MODE = 'script_drop_mode_v1'; // 'hover', 'icon', 'off'
 
     let isRendering = false;
-    const huntDataCache = new Map(); // Cache para guardar SellsFor e Drops extraídos do .map-tip
+    const globalCreatureApiData = new Map();
+    const globalItemApiData = new Map();
 
-    // URL do JSON externo no GitHub para os tipos dos Pokémons (expansível para 198+ pokémons e novos mapas)
-    const POKEMON_TYPES_JSON_URL = 'https://raw.githubusercontent.com/seu-usuario/seu-repositorio/main/pokemons-types.json';
+    // URLs oficiais do jogo
+    const POKEMON_TYPES_JSON_URL = 'https://poke.idleworld.online/game/creatures.json';
+    const ITEMS_JSON_URL = 'https://poke.idleworld.online/game/items.json';
 
     // --- TABELA COMPACTA DE TIPOS POKÉMON ---
     const TYPE_CHART = {
@@ -45,7 +47,6 @@
         steel: { fire: 0.5, water: 0.5, electric: 0.5, ice: 2, rock: 2, steel: 0.5 }
     };
 
-    // --- BASE DE TIPOS (FALLBACK + DINÂMICO) ---
     const BASE_POKEMON_TYPES = {
         "magneton": ["electric", "steel"], "charizard": ["fire", "flying"], "blastoise": ["water"],
         "venusaur": ["grass", "poison"], "pikachu": ["electric"], "alakazam": ["psychic"],
@@ -57,31 +58,70 @@
 
     let POKEMON_TYPES = { ...BASE_POKEMON_TYPES };
 
-    // Carregamento dinâmico opcional do GitHub para abranger todos os 198+ pokémons
-    async function loadExternalPokemonTypes() {
+    // Carregamento de Criaturas da API
+    async function loadExternalPokemonData() {
         try {
             const response = await fetch(POKEMON_TYPES_JSON_URL);
             if (response.ok) {
                 const data = await response.json();
-                POKEMON_TYPES = { ...POKEMON_TYPES, ...data };
+                const creaturesList = Array.isArray(data) ? data : (data.creatures || []);
+                if (creaturesList.length > 0) {
+                    const fetchedTypes = {};
+                    creaturesList.forEach(poke => {
+                        const pokeName = (poke.name || '').toLowerCase().trim();
+                        const t1 = poke.type1 || poke.type_1;
+                        const t2 = poke.type2 || poke.type_2;
+                        if (pokeName && t1) {
+                            const types = [t1.toLowerCase().trim()];
+                            if (t2) types.push(t2.toLowerCase().trim());
+                            fetchedTypes[pokeName] = types;
+                        }
+                        globalCreatureApiData.set(pokeName, poke);
+                    });
+                    POKEMON_TYPES = { ...BASE_POKEMON_TYPES, ...fetchedTypes };
+                    buildSimpleList();
+                }
             }
         } catch (e) {
-            console.warn("⚠️ Usando tipos locais padrão (fallback).");
+            console.warn("⚠️ Falha ao carregar creatures.json", e);
         }
     }
-    loadExternalPokemonTypes();
 
-    // Regra de Outland para Vantagens Elementais (Suporte a 0.33x, 5.5x, etc.)
+    // Carregamento de Itens da API (para buscar os ícones botânicos/oficiais)
+    async function loadExternalItemData() {
+        try {
+            const response = await fetch(ITEMS_JSON_URL);
+            if (response.ok) {
+                const data = await response.json();
+                const itemsList = Array.isArray(data) ? data : (data.items || Object.values(data));
+                itemsList.forEach(item => {
+                    if (!item) return;
+                    const itemName = (item.name || item.title || '').toLowerCase().trim();
+                    const itemId = String(item.id || item.key || '').toLowerCase().trim();
+
+                    if (itemName) globalItemApiData.set(itemName, item);
+                    if (itemId) globalItemApiData.set(itemId, item);
+                });
+                buildSimpleList();
+            }
+        } catch (e) {
+            console.warn("⚠️ Falha ao carregar items.json", e);
+        }
+    }
+
+    loadExternalPokemonData();
+    loadExternalItemData();
+
     function applyOutlandModifier(baseMultiplier) {
         if (baseMultiplier === 1.5) return 1.75;
         if (baseMultiplier === 2.0) return 2.50;
         if (baseMultiplier >= 4.0) return 5.50;
         if (baseMultiplier === 0.5) return 0.33;
-        return baseMultiplier; // Neutral (1) and Immunities (0) stay same
+        return baseMultiplier;
     }
 
     function getOffensiveMultiplier(attackerTypes, defenderTypes) {
-        let maxMult = 1.0;
+        let bestMult = null;
         attackerTypes.forEach(attType => {
             let mult = 1.0;
             defenderTypes.forEach(defType => {
@@ -90,12 +130,148 @@
                     mult *= chart[defType];
                 }
             });
-            if (mult > maxMult) maxMult = mult;
+            if (bestMult === null || mult > bestMult) {
+                bestMult = mult;
+            }
         });
-        return applyOutlandModifier(maxMult);
+        return applyOutlandModifier(bestMult !== null ? bestMult : 1.0);
     }
 
-    // --- ESTILOS DINÂMICOS & CORREÇÃO DE LAYOUT (Kanto / Buraco Preto) ---
+    function getCleanHuntName(huntName) {
+        if (!huntName) return '';
+        return huntName.toLowerCase()
+            .replace(/\[.*?\]/g, '')
+            .replace(/\(.*\)/g, '')
+            .trim();
+    }
+
+    function getDefenderTypes(huntName) {
+        const cleanName = getCleanHuntName(huntName);
+        if (POKEMON_TYPES[cleanName]) return POKEMON_TYPES[cleanName];
+
+        const words = cleanName.split(/\s+/);
+        for (let i = words.length - 1; i >= 0; i--) {
+            const subName = words.slice(i).join(' ');
+            if (POKEMON_TYPES[subName]) return POKEMON_TYPES[subName];
+            if (POKEMON_TYPES[words[i]]) return POKEMON_TYPES[words[i]];
+        }
+        return ["normal"];
+    }
+
+    // --- PROCESSAMENTO DE DROPS COM ÍCONES REAIS DO ITEMS.JSON ---
+    function resolveItemIcon(itemName) {
+        const cleanKey = itemName.toLowerCase().trim();
+        let itemObj = globalItemApiData.get(cleanKey);
+
+        if (!itemObj) {
+            // Tenta buscar por correspondência parcial
+            for (const [key, val] of globalItemApiData.entries()) {
+                if (cleanKey.includes(key) || key.includes(cleanKey)) {
+                    itemObj = val;
+                    break;
+                }
+            }
+        }
+
+        if (itemObj) {
+            const imgPath = itemObj.image || itemObj.icon || itemObj.sprite || itemObj.img || '';
+            if (imgPath) {
+                // Se o caminho for relativo, constrói a URL correta com base no domínio
+                const fullImgUrl = imgPath.startsWith('http') ? imgPath : `https://poke.idleworld.online/${imgPath.startsWith('/') ? imgPath.slice(1) : imgPath}`;
+                return `<img src="${fullImgUrl}" style="width:20px; height:20px; vertical-align:middle; margin-right:8px; object-fit:contain;" />`;
+            }
+        }
+
+        // Fallback visual caso o item não tenha imagem mapeada
+        return `<span style="display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; background:#12202a; border:1px solid #273f52; border-radius:4px; margin-right:8px; font-size:10px; color:#48bb78;">🌿</span>`;
+    }
+
+    function parseDropsHTML(rawDrops) {
+        if (!rawDrops) return '';
+
+        if (Array.isArray(rawDrops)) {
+            return rawDrops.map(d => {
+                let itemName = 'Item';
+                let customImgHTML = '';
+
+                if (typeof d === 'object' && d !== null) {
+                    itemName = d.name || d.item || d.label || d.title || 'Item';
+                    const directImg = d.image || d.icon || d.sprite || d.img || '';
+                    if (directImg) {
+                        const fullUrl = directImg.startsWith('http') ? directImg : `https://poke.idleworld.online/${directImg.startsWith('/') ? directImg.slice(1) : directImg}`;
+                        customImgHTML = `<img src="${fullUrl}" style="width:20px; height:20px; vertical-align:middle; margin-right:8px; object-fit:contain;" />`;
+                    }
+                } else {
+                    itemName = String(d);
+                }
+
+                const iconHTML = customImgHTML || resolveItemIcon(itemName);
+
+                return `
+                    <div style="display:flex; align-items:center; margin-bottom:6px; font-size:13px; color:#cbd5e0; background:rgba(20,34,45,0.6); padding:4px 8px; border-radius:4px; border:1px solid #1a2d3a;">
+                        ${iconHTML}
+                        <span style="font-weight:500; color:#e2e8f0;">${itemName}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        if (typeof rawDrops === 'string') {
+            return `<div style="font-size:13px; color:#cbd5e0;">${rawDrops}</div>`;
+        }
+
+        return '';
+    }
+
+    function extractHuntDetailsFromJSON(name, marker) {
+        const cleanName = getCleanHuntName(name);
+        let priceVal = 0;
+        let dropsHTML = '';
+
+        if (globalCreatureApiData.has(cleanName)) {
+            const pokeObj = globalCreatureApiData.get(cleanName);
+            const possiblePriceKeys = ['sell', 'sellsFor', 'price', 'value', 'gold', 'money', 'cost', 'reward'];
+
+            for (const key of possiblePriceKeys) {
+                if (pokeObj[key] !== undefined && pokeObj[key] !== null && pokeObj[key] !== '') {
+                    const parsed = parseInt(String(pokeObj[key]).replace(/\D/g, ''), 10);
+                    if (!isNaN(parsed) && parsed > 0) {
+                        priceVal = parsed;
+                        break;
+                    }
+                }
+            }
+
+            const rawDrops = pokeObj.drops || pokeObj.drop || pokeObj.loot || pokeObj.items;
+            dropsHTML = parseDropsHTML(rawDrops);
+        }
+
+        if ((priceVal === 0 || !dropsHTML) && marker) {
+            marker.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+            const mapTip = document.querySelector('.map-tip');
+            if (mapTip) {
+                if (priceVal === 0) {
+                    const sellEl = mapTip.querySelector('.map-tip-sell b') || mapTip.querySelector('.map-tip-sell');
+                    if (sellEl) {
+                        const parsedDom = parseInt(sellEl.textContent.replace(/\D/g, ''), 10);
+                        if (!isNaN(parsedDom) && parsedDom > 0) priceVal = parsedDom;
+                    }
+                }
+                if (!dropsHTML) {
+                    const dropsEl = mapTip.querySelector('.map-tip-drops');
+                    if (dropsEl) {
+                        dropsHTML = `<div style="font-size:13px; color:#cbd5e0; padding:4px;">${dropsEl.innerHTML}</div>`;
+                    }
+                }
+            }
+            marker.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+        }
+
+        const sellsFor = priceVal > 0 ? `$ ${priceVal.toLocaleString('en-US')}` : 'Indisponível';
+        return { sellsFor, numericPrice: priceVal, dropsHTML };
+    }
+
+    // --- ESTILOS VISUAIS (ESTÉTICA BOTÂNICA E LIMPA) ---
     const style = document.createElement('style');
     style.id = 'simplifier-dynamic-styles';
     style.innerHTML = `
@@ -111,18 +287,19 @@
         #dock-btn-quick-tp:hover { background: rgba(49, 130, 206, 0.5); transform: scale(1.08); }
 
         .hunt-drop-tooltip {
-            position: absolute; background: #081017; border: 1px solid #2b4c66;
-            border-radius: 4px; padding: 6px 10px; z-index: 9999; font-size: 12px;
-            color: #e2e8f0; pointer-events: none; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            position: absolute; background: #0c161f; border: 1px solid #233e52;
+            border-radius: 8px; padding: 10px 14px; z-index: 9999; font-size: 13px;
+            color: #e2e8f0; pointer-events: none; box-shadow: 0 8px 20px rgba(0,0,0,0.8);
+            min-width: 180px; max-width: 280px;
         }
         .drop-icon-btn {
-            background: #1a2b3c; border: 1px solid #3182ce; color: #63b3ed;
-            border-radius: 50%; width: 20px; height: 20px; font-size: 11px;
+            background: #14222d; border: 1px solid #2b4c66; color: #48bb78;
+            border-radius: 50%; width: 24px; height: 24px; font-size: 12px;
             display: inline-flex; align-items: center; justify-content: center;
-            cursor: pointer; margin-left: 6px;
+            cursor: pointer; margin-left: 8px; font-weight: bold; transition: all 0.2s;
         }
+        .drop-icon-btn:hover { background: #1c3040; border-color: #48bb78; }
 
-        /* Correção Completa do Layout do Mapa - Remove buraco preto e ocupa 100% da largura */
         .map-window {
             display: flex !important;
             flex-direction: column !important;
@@ -143,7 +320,6 @@
             flex-direction: column;
         }
 
-        /* Master Switches - Desativação visual de sub-opções dependentes */
         .mod-disabled {
             opacity: 0.35 !important;
             pointer-events: none !important;
@@ -160,7 +336,6 @@
         .hunt-marker { opacity: 0 !important; position: absolute !important; pointer-events: none !important; }
     `;
 
-    // --- CONTROLE DE CONFIGURAÇÕES ---
     function isScriptMapActive() { return localStorage.getItem(STORAGE_SCRIPT_ACTIVE) !== 'false'; }
     function setScriptMapActive(state) { localStorage.setItem(STORAGE_SCRIPT_ACTIVE, state ? 'true' : 'false'); applyMapScriptState(); }
 
@@ -170,7 +345,7 @@
     function getNavTpMode() { return localStorage.getItem(STORAGE_NAV_MODE) || 'fav'; }
     function setNavTpMode(mode) { localStorage.setItem(STORAGE_NAV_MODE, mode); updateNavButtonAppearance(); }
 
-    function getDropMode() { return localStorage.getItem(STORAGE_DROP_MODE) || 'hover'; } // 'hover', 'icon', 'off'
+    function getDropMode() { return localStorage.getItem(STORAGE_DROP_MODE) || 'hover'; }
     function setDropMode(mode) { localStorage.setItem(STORAGE_DROP_MODE, mode); buildSimpleList(); }
 
     function applyMapScriptState() {
@@ -217,32 +392,6 @@
         return nameEl ? nameEl.textContent.trim().toLowerCase() : '';
     }
 
-    // --- LEITURA E SCRAPING DA TOOLTIP DA HUNT (.map-tip) ---
-    function extractHuntDetailsFromTooltip(marker, name) {
-        if (huntDataCache.has(name)) return huntDataCache.get(name);
-
-        let sellsFor = 'Indisponível';
-        let dropsHTML = '';
-
-        marker.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-
-        const mapTip = document.querySelector('.map-tip');
-        if (mapTip) {
-            const sellEl = mapTip.querySelector('.map-tip-sell b');
-            if (sellEl) sellsFor = '$ ' + sellEl.textContent.trim();
-
-            const dropsEl = mapTip.querySelector('.map-tip-drops');
-            if (dropsEl) dropsHTML = dropsEl.innerHTML;
-        }
-
-        marker.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
-
-        const data = { sellsFor, dropsHTML };
-        if (sellsFor !== 'Indisponível') huntDataCache.set(name, data);
-        return data;
-    }
-
-    // --- TELEPORTES ---
     function teleportToTarget(huntName) {
         if (!huntName) return alert('Nenhuma hunt definida!');
         const mapBtn = document.querySelector('button[data-guide="dock-map"]');
@@ -303,7 +452,6 @@
         }
     }
 
-    // --- ABA SCRIPT MODS NAS CONFIGURAÇÕES (.cfg-window) COM MASTER SWITCHES ---
     function injectConfigTab() {
         const cfgWindow = document.querySelector('.cfg-window');
         if (!cfgWindow || cfgWindow.querySelector('.cfg-tab-mods')) return;
@@ -433,7 +581,6 @@
         });
     }
 
-    // --- RENDERIZAÇÃO DA LISTA SIMPLIFICADA DO MAPA ---
     function buildSimpleList() {
         if (!isScriptMapActive() || isRendering) return;
         isRendering = true;
@@ -444,7 +591,6 @@
 
             if (!mapWindow || !mapBody) { isRendering = false; return; }
 
-            // Adiciona barra de controles customizados (Filtro por Valor e Efetividade)
             let customFilterBar = document.getElementById('custom-hunts-filter-bar');
             if (!customFilterBar) {
                 customFilterBar = document.createElement('div');
@@ -507,18 +653,14 @@
 
                 if (isHere) saveLastHunt(name);
 
-                // Extração do valor ($ Sells for) e drops do mapa original
-                const details = extractHuntDetailsFromTooltip(marker, name);
-                const numericPrice = parseInt(details.sellsFor.replace(/\D/g, ''), 10) || 0;
-
-                // Efetividade do Pokémon ativo contra a Hunt
-                const defenderTypes = POKEMON_TYPES[name.toLowerCase()] || ["normal"];
+                const details = extractHuntDetailsFromJSON(name, marker);
+                const defenderTypes = getDefenderTypes(name);
                 const effectiveness = getOffensiveMultiplier(activePkmnTypes, defenderTypes);
 
                 huntDataList.push({
                     name, lvlText, isHere,
                     sellsFor: details.sellsFor,
-                    numericPrice,
+                    numericPrice: details.numericPrice,
                     dropsHTML: details.dropsHTML,
                     effectiveness,
                     iconStyle: iconDiv ? (iconDiv.getAttribute('style') || '') : '',
@@ -530,8 +672,7 @@
                 huntDataList = huntDataList.filter(hunt => hunt.name.toLowerCase().includes(query));
             }
 
-            // Ordenação
-            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'fav';
+            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select'].value : 'fav';
             huntDataList.sort((a, b) => {
                 if (sortVal === 'price_desc') return b.numericPrice - a.numericPrice;
                 if (sortVal === 'price_asc') return a.numericPrice - b.numericPrice;
@@ -593,7 +734,6 @@
                     </div>
                 `;
 
-                // Ações do Drop Preview (Modo 1: Hover | Modo 2: Icone ? | Modo 3: Off)
                 if (dropMode === 'hover' && hunt.dropsHTML) {
                     row.addEventListener('mouseenter', (e) => showDropTooltip(e, hunt.dropsHTML));
                     row.addEventListener('mouseleave', hideDropTooltip);
@@ -645,17 +785,16 @@
         }
     }
 
-    // --- TOOLTIP FLUTUANTE DOS DROPS ---
     let activeTooltip = null;
     function showDropTooltip(e, dropsHTML) {
         hideDropTooltip();
         activeTooltip = document.createElement('div');
         activeTooltip.className = 'hunt-drop-tooltip';
-        activeTooltip.innerHTML = `<b>Drops:</b><div style="margin-top:4px;">${dropsHTML}</div>`;
+        activeTooltip.innerHTML = `<div style="font-weight:bold; color:#48bb78; margin-bottom:8px; border-bottom:1px solid #1a2d3a; padding-bottom:4px; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Drops da Hunt:</div><div>${dropsHTML}</div>`;
         document.body.appendChild(activeTooltip);
 
         const rect = e.target.getBoundingClientRect();
-        activeTooltip.style.top = `${rect.bottom + window.scrollY + 4}px`;
+        activeTooltip.style.top = `${rect.bottom + window.scrollY + 6}px`;
         activeTooltip.style.left = `${rect.left + window.scrollX}px`;
     }
 
@@ -666,8 +805,7 @@
         }
     }
 
-    // --- OBSERVER ---
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(() => {
         injectQuickTPButton();
         injectConfigTab();
         applyChatState();
