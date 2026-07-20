@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.2
+// @version      9.4.3
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1297,6 +1297,8 @@
     let lastCatchTimestamp = null;
     let ballsAtLastCatch = 0;
     let capturesCount = 0;
+    let lastHuntStartTime = null;
+    let currentHuntStartTime = Date.now();
 
     function formatNumber(num) {
         return new Intl.NumberFormat('pt-BR').format(num);
@@ -1316,7 +1318,15 @@
             return ['', ''];
         };
 
-        const [balLast, balCurr] = cmp(last.balHour, curr.balHour);
+        const formatTime = (ts) => {
+            if (!ts) return '';
+            const d = new Date(ts);
+            return ` (${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')})`;
+        };
+        const lastTitle = 'Última' + formatTime(lastHuntStartTime);
+        const currTitle = 'Atual' + formatTime(currentHuntStartTime);
+
+        const [balLast, balCurr] = cmp(last.balance, curr.balance);
         const [xpLast, xpCurr] = cmp(last.xpHour, curr.xpHour);
 
         const backdrop = document.createElement('div');
@@ -1325,8 +1335,8 @@
             <div class="ha-compare-modal">
                 <h3>⚖️ Comparação de Hunts</h3>
                 <table class="ha-compare-table">
-                    <tr><th>Métrica</th><th class="center">Última Hunt</th><th class="center">Hunt Atual</th></tr>
-                    <tr><td>Balance/h</td><td class="center ${balLast}">$${formatNumber(last.balHour)}</td><td class="center ${balCurr}">$${formatNumber(curr.balHour)}</td></tr>
+                    <tr><th>Métrica</th><th class="center">${lastTitle}</th><th class="center">${currTitle}</th></tr>
+                    <tr><td>Balance Total</td><td class="center ${balLast}">$${formatNumber(last.balance)}</td><td class="center ${balCurr}">$${formatNumber(curr.balance)}</td></tr>
                     <tr><td>XP/h</td><td class="center ${xpLast}">${formatNumber(last.xpHour)}</td><td class="center ${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
                     <tr><td>Tempo</td><td class="center">${last.timeText}</td><td class="center">${curr.timeText}</td></tr>
                     <tr><td>Defeated</td><td class="center">${last.defeated}</td><td class="center">${curr.defeated}</td></tr>
@@ -1401,6 +1411,8 @@
             capturesCount = 0;
             lastCatchTimestamp = null;
             ballsAtLastCatch = 0;
+            lastHuntStartTime = currentHuntStartTime;
+            currentHuntStartTime = Date.now();
         }
         currentHuntSnapshot = snapshot;
 
