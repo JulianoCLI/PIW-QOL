@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.0.4
+// @version      9.0.5
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -604,57 +604,20 @@
                 customFilterBar = document.createElement('div');
                 customFilterBar.id = 'custom-hunts-filter-bar';
                 customFilterBar.style = `
-                    display: flex; flex-direction: column; gap: 6px; margin-top: 8px; margin-bottom: 4px; font-size: 12px;
+                    display: flex; gap: 8px; margin-top: 8px; margin-bottom: 4px; font-size: 13px;
                 `;
                 
-                const ALL_TYPES = ['normal','fire','water','electric','grass','ice','fighting','poison','ground','flying','psychic','bug','rock','ghost','dragon','dark','steel'];
-                const badgesHTML = ALL_TYPES.map(t => `<button class="type-badge" data-type="${t}" style="background:#1c3040; border:1px solid #2b4c66; color:#a0aec0; border-radius:4px; padding:2px 6px; cursor:pointer; font-size:11px; text-transform:capitalize;">${t}</button>`).join('');
-
                 customFilterBar.innerHTML = `
-                    <div style="display: flex; gap: 8px; width: 100%;">
-                        <select id="sort-hunts-select" style="background:#14222d; color:#e2e8f0; border:1px solid #273f52; padding:4px 8px; border-radius:4px; outline:none; flex-grow:1;">
-                            <option value="fav">Ordenar: Favoritos Primeiro</option>
-                            <option value="price_desc">Preço: Maior -> Menor</option>
-                            <option value="price_asc">Preço: Menor -> Maior</option>
-                            <option value="eff_desc">Efetividade: Maior Vantagem (Outland)</option>
-                        </select>
-                        <select id="level-hunts-select" style="background:#14222d; color:#e2e8f0; border:1px solid #273f52; padding:4px 8px; border-radius:4px; outline:none; min-width:110px;">
-                            <option value="all">Todos os Níveis</option>
-                        </select>
-                        <button id="toggle-type-filter" style="background:#1a365d; color:#63b3ed; border:1px solid #2a4365; padding:4px 8px; border-radius:4px; cursor:pointer;">Tipos</button>
-                    </div>
-                    <div id="type-filter-panel" style="display:none; flex-wrap:wrap; gap:4px; margin-top:2px;">
-                        ${badgesHTML}
-                    </div>
+                    <select id="sort-hunts-select" style="background:#0c161f; color:#cbd5e0; border:1px solid #1a2d3a; padding:6px 10px; border-radius:6px; outline:none; flex-grow:1; box-shadow: inset 0 1px 2px rgba(0,0,0,0.3); font-family: inherit; cursor: pointer;">
+                        <option value="fav">Ordenar: Favoritos Primeiro</option>
+                        <option value="price_desc">Preço: Maior -> Menor</option>
+                        <option value="price_asc">Preço: Menor -> Maior</option>
+                        <option value="eff_desc">Efetividade: Maior Vantagem (Outland)</option>
+                    </select>
                 `;
                 mapBody.appendChild(customFilterBar);
 
                 document.getElementById('sort-hunts-select').addEventListener('change', () => { isRendering = false; buildSimpleList(); });
-                document.getElementById('level-hunts-select').addEventListener('change', () => { isRendering = false; buildSimpleList(); });
-                
-                document.getElementById('toggle-type-filter').addEventListener('click', () => {
-                    const panel = document.getElementById('type-filter-panel');
-                    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
-                });
-
-                document.querySelectorAll('.type-badge').forEach(badge => {
-                    badge.addEventListener('click', (e) => {
-                        const btn = e.target;
-                        if (btn.classList.contains('selected')) {
-                            btn.classList.remove('selected');
-                            btn.style.background = '#1c3040';
-                            btn.style.color = '#a0aec0';
-                            btn.style.borderColor = '#2b4c66';
-                        } else {
-                            btn.classList.add('selected');
-                            btn.style.background = '#2c5282';
-                            btn.style.color = '#ebf8ff';
-                            btn.style.borderColor = '#4299e1';
-                        }
-                        isRendering = false;
-                        buildSimpleList();
-                    });
-                });
             }
 
             let simpleContainer = document.getElementById('simple-hunts-container');
@@ -681,7 +644,6 @@
             const activePkmnTypes = POKEMON_TYPES[activePkmn] || ["normal"];
 
             let huntDataList = [];
-            let uniqueLevels = new Set();
 
             markers.forEach(marker => {
                 const styleAttr = marker.getAttribute('style') || '';
@@ -693,7 +655,6 @@
 
                 const name = nameEl ? nameEl.textContent.trim() : 'Sem Nome';
                 const lvlText = lvlEl ? lvlEl.textContent.trim() : 'Nv 1';
-                uniqueLevels.add(lvlText);
                 const isHere = marker.classList.contains('here');
 
                 if (isHere) saveLastHunt(name);
@@ -716,30 +677,9 @@
                 });
             });
 
-            const levelSelect = document.getElementById('level-hunts-select');
-            if (levelSelect) {
-                const currentLvl = levelSelect.value;
-                const levelsArr = Array.from(uniqueLevels).sort((a,b) => parseInt(a.replace(/\D/g,'')||0) - parseInt(b.replace(/\D/g,'')||0));
-                const newHTML = `<option value="all">Todos os Níveis</option>` + levelsArr.map(lvl => `<option value="${lvl}">${lvl}</option>`).join('');
-                if (levelSelect.getAttribute('data-options') !== newHTML) {
-                    levelSelect.innerHTML = newHTML;
-                    levelSelect.setAttribute('data-options', newHTML);
-                    if (levelsArr.includes(currentLvl)) levelSelect.value = currentLvl;
-                }
+            if (query) {
+                huntDataList = huntDataList.filter(hunt => hunt.name.toLowerCase().includes(query));
             }
-
-            const selectedLvl = levelSelect ? levelSelect.value : 'all';
-            const selectedTypes = Array.from(document.querySelectorAll('.type-badge.selected')).map(el => el.dataset.type);
-
-            huntDataList = huntDataList.filter(hunt => {
-                if (query && !hunt.name.toLowerCase().includes(query)) return false;
-                if (selectedLvl !== 'all' && hunt.lvlText !== selectedLvl) return false;
-                if (selectedTypes.length > 0) {
-                    const hasType = selectedTypes.some(type => hunt.defenderTypes.includes(type));
-                    if (!hasType) return false;
-                }
-                return true;
-            });
 
             const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'fav';
             huntDataList.sort((a, b) => {
