@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.9
+// @version      9.4.10
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1385,7 +1385,7 @@
     }
 
     function trackHuntAnalyzer() {
-        const haWindow = document.querySelector('.ha-window');
+        const haWindow = document.querySelector('.ha-window:not(.ha-compare-modal)');
         if (!haWindow) return;
 
         const getCardVal = (idx) => {
