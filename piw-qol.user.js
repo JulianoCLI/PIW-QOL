@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.3
+// @version      9.4.4
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1318,13 +1318,16 @@
             return ['', ''];
         };
 
-        const formatTime = (ts) => {
-            if (!ts) return '';
-            const d = new Date(ts);
-            return ` (${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')})`;
+        const formatTitle = (ts, loc) => {
+            let res = loc ? loc : 'Hunt';
+            if (ts) {
+                const d = new Date(ts);
+                res += ` (${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')})`;
+            }
+            return res;
         };
-        const lastTitle = 'Última' + formatTime(lastHuntStartTime);
-        const currTitle = 'Atual' + formatTime(currentHuntStartTime);
+        const lastTitle = formatTitle(lastHuntStartTime, last.locName);
+        const currTitle = formatTitle(currentHuntStartTime, curr.locName);
 
         const [balLast, balCurr] = cmp(last.balance, curr.balance);
         const [xpLast, xpCurr] = cmp(last.xpHour, curr.xpHour);
@@ -1365,6 +1368,13 @@
             balance = parseInt(balanceNode.textContent.replace(/−/g, '-').replace(/[.]/g, '').replace(/[^0-9-]/g, ''), 10) || 0;
         }
 
+        let locName = '';
+        const tloc = document.querySelector('.phud-tloc');
+        if (tloc) {
+            const parts = tloc.textContent.split('·');
+            if (parts.length > 1) locName = parts[1].trim();
+        }
+
         const ratesNode = haWindow.querySelector('.ha-rates');
         let balHour = 0, xpHour = 0;
         if (ratesNode) {
@@ -1394,7 +1404,7 @@
             }
         }
 
-        const snapshot = { defeated, timeText, balance, balHour, xpHour };
+        const snapshot = { defeated, timeText, balance, balHour, xpHour, locName };
 
         const catchCard = haWindow.querySelector('.ha-catch b');
         const currentCatch = catchCard ? parseInt(catchCard.textContent.replace(/[^0-9]/g, ''), 10) || 0 : 0;
