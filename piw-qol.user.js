@@ -472,11 +472,23 @@
         }
     }
 
+    function triggerReactClick(element) {
+        // Tenta invocar o onClick do React diretamente via __reactProps$
+        const reactPropsKey = Object.keys(element).find(k => k.startsWith('__reactProps$'));
+        if (reactPropsKey && element[reactPropsKey]?.onClick) {
+            element[reactPropsKey].onClick(new MouseEvent('click', { bubbles: true }));
+            return true;
+        }
+        // Fallback: dispatchEvent nativo com bubbles
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        return true;
+    }
+
     function openShopFromAnywhere() {
-        // Estratégia 1: Clicar no botão CTA do market (existe no DOM globalmente)
-        const marketCta = document.querySelector('button.market-cta, .market-cta');
+        // Estratégia 1: Botão CTA do market (existe no DOM globalmente)
+        const marketCta = document.querySelector('button.market-cta');
         if (marketCta) {
-            marketCta.click();
+            triggerReactClick(marketCta);
             return;
         }
 
@@ -484,7 +496,7 @@
         const npcBtns = document.querySelectorAll('.npc-dlg-btn');
         for (const btn of npcBtns) {
             if (btn.textContent.includes('Loja') || btn.textContent.includes('loja')) {
-                btn.click();
+                triggerReactClick(btn);
                 return;
             }
         }
