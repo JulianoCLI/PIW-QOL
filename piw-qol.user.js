@@ -911,7 +911,7 @@
         // 1. Sell Tab: Locks & Intercept Sell
         const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Sell'));
         if (isSellTab) {
-            mkWindow.querySelectorAll('.mk-row.mk-srow-head').forEach(row => {
+            mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
                 if (row.querySelector('.mk-lock-sell')) return;
                 const priceSpan = row.querySelector('.mk-price');
                 if (priceSpan) {
@@ -941,7 +941,7 @@
             });
             
             // Intercept Sell CTA
-            const sellCta = mkWindow.querySelector('button.market-cta');
+            const sellCta = mkWindow.querySelector('button.mk-sell');
             if (sellCta && !sellCta.dataset.intercepted) {
                 const reactPropsKey = Object.keys(sellCta).find(k => k.startsWith('__reactProps$'));
                 if (reactPropsKey && sellCta[reactPropsKey] && sellCta[reactPropsKey].onClick) {
@@ -949,7 +949,7 @@
                     sellCta[reactPropsKey].onClick = (e) => {
                         const confirmList = getSellConfirmItems();
                         const selectedToConfirm = [];
-                        mkWindow.querySelectorAll('.mk-row.mk-srow-head').forEach(row => {
+                        mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
                             const cb = row.querySelector('input.mk-check');
                             if (cb && cb.checked) {
                                 const nameEl = row.querySelector('.mk-name');
@@ -975,15 +975,15 @@
         // 2. Pokemon Tab: Rarity select all limit
         const isPokeTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Pokémon'));
         if (isPokeTab) {
-            const selectAllBtn = Array.from(mkWindow.querySelectorAll('button.mk-tab')).find(b => b.textContent.includes('Select all') && !b.dataset.intercepted) || Array.from(mkWindow.querySelectorAll('button')).find(b => b.className.includes('selall') && !b.dataset.intercepted);
-            if (selectAllBtn) {
+            const selectAllBtn = mkWindow.querySelector('button.mk-selall');
+            if (selectAllBtn && !selectAllBtn.dataset.intercepted) {
                 const reactPropsKey = Object.keys(selectAllBtn).find(k => k.startsWith('__reactProps$'));
                 if (reactPropsKey && selectAllBtn[reactPropsKey] && selectAllBtn[reactPropsKey].onClick) {
                     const origClick = selectAllBtn[reactPropsKey].onClick;
                     selectAllBtn[reactPropsKey].onClick = (e) => {
                         origClick(e);
                         setTimeout(() => {
-                            mkWindow.querySelectorAll('.mk-row.mk-srow-head').forEach(row => {
+                            mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
                                 const rarity = getPokemonRarity(row);
                                 const forbidden = ['lendária', 'mítica', 'divina'];
                                 if (rarity && forbidden.some(r => rarity.includes(r))) {
