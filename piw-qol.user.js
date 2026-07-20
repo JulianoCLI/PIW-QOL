@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.6.0
+// @version      9.7.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -22,6 +22,8 @@
     const STORAGE_SELL_CONFIRM = 'script_sell_confirm_items_v1';
     const STORAGE_SELL_LOCKS = 'script_sell_locks_v1';
     const STORAGE_DEX_FAST_TRAVEL = 'script_dex_fast_travel_v1';
+    const STORAGE_GUARD_LEGENDARY = 'script_guard_legendary_v1';
+    const STORAGE_GUARD_SELL_LOCK = 'script_guard_sell_lock_v1';
 
     let isRendering = false;
     const globalCreatureApiData = new Map();
@@ -279,7 +281,8 @@
             marker.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
         }
 
-        const sellsFor = priceVal > 0 ? `$ ${priceVal.toLocaleString('en-US')}` : 'Indisponível';
+        let sellsFor = priceVal > 0 ? `$ ${priceVal.toLocaleString('en-US')}` : 'Indisponível';
+        if (cleanName === 'aerodactyl') sellsFor = 'Não pode ser vendido';
         const expText = experience > 0 ? `${experience.toLocaleString('en-US')} XP` : '';
         return { sellsFor, numericPrice: priceVal, dropsHTML, experience, expText };
     }
@@ -449,6 +452,12 @@
 
     function isDexFastTravelActive() { return localStorage.getItem(STORAGE_DEX_FAST_TRAVEL) === 'true'; }
     function setDexFastTravel(val) { localStorage.setItem(STORAGE_DEX_FAST_TRAVEL, val ? 'true' : 'false'); }
+
+    function isGuardLegendaryActive() { return localStorage.getItem(STORAGE_GUARD_LEGENDARY) !== 'false'; }
+    function setGuardLegendary(val) { localStorage.setItem(STORAGE_GUARD_LEGENDARY, val ? 'true' : 'false'); }
+
+    function isGuardSellLockActive() { return localStorage.getItem(STORAGE_GUARD_SELL_LOCK) !== 'false'; }
+    function setGuardSellLock(val) { localStorage.setItem(STORAGE_GUARD_SELL_LOCK, val ? 'true' : 'false'); }
 
     function applyMapScriptState() {
         const active = isScriptMapActive();
@@ -652,6 +661,21 @@
                         </label>
                     </div>
 
+                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
+                        <div class="cfg-label" style="margin-bottom: 6px;">
+                            <b style="color: #e2e8f0; font-size: 14px;">Select All Guards</b>
+                            <span style="color: #a0aec0; font-size: 11px;">Proteções ao clicar em Select All nas abas</span>
+                        </div>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 0;">
+                            <input type="checkbox" class="btn-guard-leg" ${isGuardLegendaryActive() ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#3182ce;">
+                            <span style="color:#a0aec0; font-size:12px;">Desmarcar Pokémons Lendários (Aba Pokémon)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 0;">
+                            <input type="checkbox" class="btn-guard-lock" ${isGuardSellLockActive() ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#3182ce;">
+                            <span style="color:#a0aec0; font-size:12px;">Desmarcar Itens com Cadeado (Aba Loja)</span>
+                        </label>
+                    </div>
+
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0; display:flex; gap:12px; align-items:flex-start;">
                         <div class="cfg-label" style="flex:1;">
                             <b style="color: #e2e8f0; font-size: 14px;">Sell Confirmation Items</b>
@@ -696,6 +720,13 @@
 
             modsContent.querySelector('.btn-dex-ft').addEventListener('change', (e) => {
                 setDexFastTravel(e.target.checked);
+            });
+            
+            modsContent.querySelector('.btn-guard-leg').addEventListener('change', (e) => {
+                setGuardLegendary(e.target.checked);
+            });
+            modsContent.querySelector('.btn-guard-lock').addEventListener('change', (e) => {
+                setGuardSellLock(e.target.checked);
             });
 
             const selectedListEl = modsContent.querySelector('#cfg-sell-selected-list');
@@ -854,11 +885,10 @@
                 
                                 customFilterBar.innerHTML = `
                     <select id="sort-hunts-select" style="background:#0c161f; color:#cbd5e0; border:1px solid #1a2d3a; padding:6px 10px; border-radius:6px; outline:none; flex-grow:1; box-shadow: inset 0 1px 2px rgba(0,0,0,0.3); font-family: inherit; cursor: pointer;">
-                        <option value="fav">Ordenar: Favoritos Primeiro</option>
                         <option value="price_desc">Preço: Maior -> Menor</option>
                         <option value="price_asc">Preço: Menor -> Maior</option>
-                        <option value="eff_desc">Efetividade: Maior Vantagem (Outland)</option>
-                        <option value="xp_eff_desc">XP × Efetividade: Maior</option>
+                        <option value="eff_desc">Efetividade: Maior Vantagem</option>
+                        <option value="xp_desc">Somente XP: Maior XP</option>
                     </select>
                 `;
                 mapBody.appendChild(customFilterBar);
@@ -929,17 +959,25 @@
                 huntDataList = huntDataList.filter(hunt => hunt.name.toLowerCase().includes(query));
             }
 
-            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'fav';
+            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'price_desc';
             huntDataList.sort((a, b) => {
-                if (sortVal === 'price_desc') return b.numericPrice - a.numericPrice;
-                if (sortVal === 'price_asc') return a.numericPrice - b.numericPrice;
-                if (sortVal === 'eff_desc') return b.effectiveness - a.effectiveness;
-                if (sortVal === 'xp_eff_desc') return a.xpEfficiency - b.xpEfficiency;
-
                 const aFav = favorites.includes(a.name);
                 const bFav = favorites.includes(b.name);
                 if (aFav && !bFav) return -1;
                 if (!aFav && bFav) return 1;
+
+                if (sortVal === 'price_desc') return b.numericPrice - a.numericPrice;
+                if (sortVal === 'price_asc') return a.numericPrice - b.numericPrice;
+                if (sortVal === 'eff_desc') {
+                    if (b.effectiveness !== a.effectiveness) return b.effectiveness - a.effectiveness;
+                    const lvlA = parseInt(a.lvlText.replace(/\D/g, '')) || 0;
+                    const lvlB = parseInt(b.lvlText.replace(/\D/g, '')) || 0;
+                    return lvlB - lvlA;
+                }
+                if (sortVal === 'xp_desc') {
+                    if (b.experience !== a.experience) return b.experience - a.experience;
+                    return b.effectiveness - a.effectiveness;
+                }
                 return a.name.localeCompare(b.name);
             });
 
@@ -974,6 +1012,20 @@
                     spriteContainer.appendChild(sprite);
                 }
 
+                let bottomInfoHTML = '';
+                if (hunt.sellsFor !== 'Indisponível' || hunt.expText) {
+                    let priceHTML = '';
+                    if (hunt.sellsFor === 'Não pode ser vendido') priceHTML = `<span>${hunt.sellsFor}</span>`;
+                    else if (hunt.sellsFor !== 'Indisponível') priceHTML = `<span>Valor: ${hunt.sellsFor}</span>`;
+                    
+                    bottomInfoHTML = `
+                        <div style="font-size: 12px; color: #48bb78; margin-top: 3px; font-weight: 500; display: flex; gap: 10px;">
+                            ${priceHTML}
+                            ${hunt.expText ? `<span style="color: #ed8936;">${hunt.expText}</span>` : ''}
+                        </div>
+                    `;
+                }
+
                 const typeBadgesHTML = hunt.defenderTypes.map(t => 
                     `<span style="font-size: 10px; background: #2d3748; color: #cbd5e0; padding: 1px 5px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">${t}</span>`
                 ).join(' ');
@@ -992,10 +1044,7 @@
                         ${typeBadgesHTML}
                         ${hunt.isHere ? '<span style="font-size: 11px; color: #4caf50; font-weight: bold;">[Aqui]</span>' : ''}
                     </div>
-                    <div style="font-size: 12px; color: #48bb78; margin-top: 3px; font-weight: 500; display: flex; gap: 10px;">
-                        <span>Valor: ${hunt.sellsFor}</span>
-                        ${hunt.expText ? `<span style="color: #ed8936;">${hunt.expText}</span>` : ''}
-                    </div>
+                    ${bottomInfoHTML}
                 `;
 
                 if (dropMode === 'hover' && hunt.dropsHTML) {
@@ -1006,7 +1055,7 @@
                 row.addEventListener('click', (e) => {
                     if (e.target.closest('button')) return;
                     saveLastHunt(hunt.name);
-                    hunt.originalElement.click();
+                    teleportToTarget(hunt.name);
                 });
 
                 const actionContainer = document.createElement('div');
@@ -1030,6 +1079,7 @@
                     font-size: 20px; cursor: pointer; padding: 4px 8px; outline: none;
                 `;
                 favBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     toggleFavorite(hunt.name);
                 });
@@ -1155,13 +1205,16 @@
             const sellSelectAll = mkWindow.querySelector('button.mk-selall');
             if (sellSelectAll && !sellSelectAll.dataset.sellLockIntercepted) {
                 sellSelectAll.addEventListener('click', () => {
-                    setTimeout(() => {
+                    if (!isGuardSellLockActive()) return;
+                    let ticks = 0;
+                    const interval = setInterval(() => {
                         mkWindow.querySelectorAll('.mk-srow-head.locked').forEach(row => {
                             const cb = row.querySelector('input.mk-check');
-                            if (cb && cb.checked) cb.click();
-                            if (cb) cb.disabled = true;
+                            if (cb && cb.checked) { cb.click(); cb.disabled = true; }
                         });
-                    }, 30);
+                        ticks++;
+                        if (ticks > 5) clearInterval(interval);
+                    }, 20);
                 });
                 sellSelectAll.dataset.sellLockIntercepted = 'true';
             }
@@ -1213,7 +1266,9 @@
             const selectAllBtn = mkWindow.querySelector('button.mk-selall');
             if (selectAllBtn && !selectAllBtn.dataset.intercepted) {
                 selectAllBtn.addEventListener('click', () => {
-                    setTimeout(() => {
+                    if (!isGuardLegendaryActive()) return;
+                    let ticks = 0;
+                    const interval = setInterval(() => {
                         mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
                             const rarity = getPokemonRarity(row);
                             const forbidden = ['lendária', 'mítica', 'divina'];
@@ -1222,7 +1277,9 @@
                                 if (cb && cb.checked) cb.click();
                             }
                         });
-                    }, 50);
+                        ticks++;
+                        if (ticks > 5) clearInterval(interval);
+                    }, 20);
                 });
                 selectAllBtn.dataset.intercepted = 'true';
             }
