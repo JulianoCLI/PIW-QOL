@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.7
+// @version      9.4.8
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1305,8 +1305,8 @@
     }
 
     function showCompareModal() {
-        const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, locName: 'Nenhuma' };
-        const last = lastHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, locName: 'Nenhuma' };
+        const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, locName: 'Nenhuma' };
+        const last = lastHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, locName: 'Nenhuma' };
 
         const cmp = (a, b) => {
             if (a > b) return ['ha-compare-winner', 'ha-compare-loser'];
@@ -1326,7 +1326,9 @@
         const currTitle = formatTitle(currentHuntStartTime, curr.locName);
 
         const [balLast, balCurr] = cmp(last.balance, curr.balance);
+        const [balhLast, balhCurr] = cmp(last.balHour, curr.balHour);
         const [xpLast, xpCurr] = cmp(last.xpHour, curr.xpHour);
+        const [killsLast, killsCurr] = cmp(last.killsHour, curr.killsHour);
 
         const formatBal = (val) => val < 0 ? `-$${formatNumber(Math.abs(val))}` : `$${formatNumber(val)}`;
 
@@ -1342,9 +1344,11 @@
                     <table class="ha-compare-table">
                         <tr><th>Métrica</th><th>${lastTitle}</th><th>${currTitle}</th></tr>
                         <tr><td>💰 Balance Total</td><td class="${balLast}">${formatBal(last.balance)}</td><td class="${balCurr}">${formatBal(curr.balance)}</td></tr>
+                        <tr><td>📉 Balance/h</td><td class="${balhLast}">${formatBal(last.balHour)}</td><td class="${balhCurr}">${formatBal(curr.balHour)}</td></tr>
                         <tr><td>✨ XP/h</td><td class="${xpLast}">${formatNumber(last.xpHour)}</td><td class="${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
+                        <tr><td>⚔️ Kills/h</td><td class="${killsLast}">${formatNumber(last.killsHour)}</td><td class="${killsCurr}">${formatNumber(curr.killsHour)}</td></tr>
                         <tr><td>⏱️ Tempo</td><td>${last.timeText}</td><td>${curr.timeText}</td></tr>
-                        <tr><td>⚔️ Defeated</td><td>${last.defeated}</td><td>${curr.defeated}</td></tr>
+                        <tr><td>💀 Defeated</td><td>${last.defeated}</td><td>${curr.defeated}</td></tr>
                     </table>
                 </div>
             </div>
@@ -1412,7 +1416,7 @@
             if (match) currentBalls = parseInt(match[1], 10);
         }
 
-        if (currentHuntSnapshot && currentHuntSnapshot.defeated > 0 && defeated === 0) {
+        if (currentHuntSnapshot && defeated < currentHuntSnapshot.defeated) {
             lastHuntSnapshot = { ...currentHuntSnapshot };
             capturesCount = 0;
             lastCatchTimestamp = null;
@@ -1428,11 +1432,12 @@
         }
 
         const ratesNode = haWindow.querySelector('.ha-rates');
-        let balHour = 0, xpHour = 0;
+        let balHour = 0, xpHour = 0, killsHour = 0;
         if (ratesNode) {
             const spans = ratesNode.querySelectorAll('span:not(.ha-catch-stats)');
             if (spans[0]) balHour = parseInt(spans[0].textContent.replace(/−/g, '-').replace(/[.]/g, '').replace(/[^0-9-]/g, ''), 10) || 0;
             if (spans[1]) xpHour = parseInt(spans[1].textContent.replace(/[.]/g, '').replace(/[^0-9]/g, ''), 10) || 0;
+            if (spans[2]) killsHour = parseInt(spans[2].textContent.replace(/[.]/g, '').replace(/[^0-9]/g, ''), 10) || 0;
 
             let catchStats = ratesNode.querySelector('.ha-catch-stats');
             if (!catchStats) {
@@ -1460,7 +1465,7 @@
             }
         }
 
-        const snapshot = { defeated, timeText, balance, balHour, xpHour, locName };
+        const snapshot = { defeated, timeText, balance, balHour, xpHour, killsHour, locName };
         currentHuntSnapshot = snapshot;
 
         const oldToggle = haWindow.querySelector('.ha-title .ha-btn-toggle-view');
