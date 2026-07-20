@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.0.5
+// @version      9.1.2
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -19,6 +19,7 @@
     const STORAGE_CHAT_ACTIVE = 'script_chat_ativo_v1';
     const STORAGE_NAV_MODE = 'script_nav_tp_mode_v1';
     const STORAGE_DROP_MODE = 'script_drop_mode_v1'; // 'hover', 'icon', 'off'
+    const STORAGE_SELL_CONFIRM = 'script_sell_confirm_items_v1';
 
     let isRendering = false;
     const globalCreatureApiData = new Map();
@@ -335,6 +336,17 @@
             pointer-events: none !important;
             filter: grayscale(100%);
         }
+
+        .mk-lock-sell { font-size: 14px; background: none; border: none; cursor: pointer; margin-left: 6px; padding: 2px; }
+        .mk-lock-sell:hover { opacity: 0.8; }
+        .mk-srow-head.locked { opacity: 0.6; }
+
+        .sell-confirm-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .sell-confirm-modal { background: #14222d; border: 1px solid #273f52; border-radius: 8px; padding: 20px; color: #e2e8f0; width: 300px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .sell-confirm-modal h3 { margin: 0 0 10px 0; color: #63b3ed; font-size: 18px; }
+        .sell-confirm-btn { padding: 6px 12px; margin: 0 6px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .sell-confirm-btn.yes { background: #48bb78; color: #fff; }
+        .sell-confirm-btn.no { background: #f56565; color: #fff; }
     `;
     document.head.appendChild(style);
 
@@ -357,6 +369,15 @@
 
     function getDropMode() { return localStorage.getItem(STORAGE_DROP_MODE) || 'hover'; }
     function setDropMode(mode) { localStorage.setItem(STORAGE_DROP_MODE, mode); buildSimpleList(); }
+
+    function getSellConfirmItems() {
+        const stored = localStorage.getItem(STORAGE_SELL_CONFIRM);
+        if (stored) return JSON.parse(stored);
+        return ['Strange Pheromone', 'Rare Pokémon Picture']; // defaults
+    }
+    function setSellConfirmItems(items) {
+        localStorage.setItem(STORAGE_SELL_CONFIRM, JSON.stringify(items));
+    }
 
     function applyMapScriptState() {
         const active = isScriptMapActive();
@@ -498,6 +519,7 @@
             const chatActiveState = isChatActive();
             const navMode = getNavTpMode();
             const dropMode = getDropMode();
+            const sellConfirmItems = getSellConfirmItems();
 
             modsContent.innerHTML = `
                 <div style="padding: 10px; display: flex; flex-direction: column; gap: 12px; background: #0c161f; border-radius: 8px;">
@@ -547,6 +569,15 @@
                             <button class="cfg-seg-btn ${!chatActiveState ? 'on' : ''} btn-chat-off" type="button" style="flex:1;">Ocultar</button>
                         </div>
                     </div>
+
+                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
+                        <div class="cfg-label" style="margin-bottom: 6px;">
+                            <b style="color: #e2e8f0; font-size: 14px;">Sell Confirmation Items</b>
+                            <span style="color: #a0aec0; font-size: 11px;">Itens que pedirão confirmação (separados por vírgula)</span>
+                        </div>
+                        <textarea id="cfg-sell-confirm" style="width:100%; height:60px; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; border-radius:4px; padding:6px; resize:none;">${sellConfirmItems.join(', ')}</textarea>
+                        <button type="button" id="btn-save-sell-confirm" style="margin-top:6px; background:#3182ce; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Salvar Lista</button>
+                    </div>
                 </div>
             `;
 
@@ -570,6 +601,17 @@
 
             modsContent.querySelector('.btn-chat-on').addEventListener('click', () => { setChatActive(true); updateModsUI(); });
             modsContent.querySelector('.btn-chat-off').addEventListener('click', () => { setChatActive(false); updateModsUI(); });
+
+            const saveBtn = modsContent.querySelector('#btn-save-sell-confirm');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', () => {
+                    const val = modsContent.querySelector('#cfg-sell-confirm').value;
+                    const arr = val.split(',').map(s => s.trim()).filter(s => s);
+                    setSellConfirmItems(arr);
+                    saveBtn.textContent = 'Salvo!';
+                    setTimeout(() => saveBtn.textContent = 'Salvar Lista', 1500);
+                });
+            }
         }
 
         const tabsList = Array.from(cfgTabs.querySelectorAll('.cfg-tab'));
@@ -825,10 +867,143 @@
     }
 
     let renderTimeout = null;
+
+    function showSellConfirm(itemNames, callback) {
+        if (!itemNames || itemNames.length === 0) return callback(true);
+        
+        const backdrop = document.createElement('div');
+        backdrop.className = 'sell-confirm-backdrop';
+        backdrop.innerHTML = \`
+            <div class="sell-confirm-modal">
+                <h3>Confirmar Venda</h3>
+                <p>Tem certeza que deseja vender os seguintes itens de alto valor?</p>
+                <div style="margin-bottom:16px; font-weight:bold; color:#ffcc00; max-height:80px; overflow-y:auto; text-align:left;">
+                    \${itemNames.map(n => '• ' + n).join('<br>')}
+                </div>
+                <div>
+                    <button class="sell-confirm-btn no" type="button">Cancelar</button>
+                    <button class="sell-confirm-btn yes" type="button">Confirmar</button>
+                </div>
+            </div>
+        \`;
+        document.body.appendChild(backdrop);
+        
+        backdrop.querySelector('.yes').addEventListener('click', () => {
+            backdrop.remove();
+            callback(true);
+        });
+        backdrop.querySelector('.no').addEventListener('click', () => {
+            backdrop.remove();
+            callback(false);
+        });
+    }
+
+    function getPokemonRarity(row) {
+        const span = row.querySelector('.mk-meta span');
+        if (!span) return null;
+        return span.textContent.trim().toLowerCase();
+    }
+
+    function injectShopEnhancements() {
+        const mkWindow = document.querySelector('.win-window.mk-window');
+        if (!mkWindow) return;
+        
+        // 1. Sell Tab: Locks & Intercept Sell
+        const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Sell'));
+        if (isSellTab) {
+            mkWindow.querySelectorAll('.mk-row.mk-srow-head').forEach(row => {
+                if (row.querySelector('.mk-lock-sell')) return;
+                const priceSpan = row.querySelector('.mk-price');
+                if (priceSpan) {
+                    const lockBtn = document.createElement('button');
+                    lockBtn.type = 'button';
+                    lockBtn.className = 'mk-lock-sell';
+                    lockBtn.innerHTML = '🔓';
+                    lockBtn.title = 'Bloquear item';
+                    lockBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const isLocked = row.classList.toggle('locked');
+                        lockBtn.innerHTML = isLocked ? '🔒' : '🔓';
+                        lockBtn.title = isLocked ? 'Desbloquear item' : 'Bloquear item';
+                        const checkbox = row.querySelector('input.mk-check');
+                        if (checkbox) {
+                            if (isLocked) {
+                                if (checkbox.checked) checkbox.click(); // trigger react uncheck
+                                checkbox.disabled = true;
+                            } else {
+                                checkbox.disabled = false;
+                            }
+                        }
+                    });
+                    priceSpan.parentNode.insertBefore(lockBtn, priceSpan.nextSibling);
+                }
+            });
+            
+            // Intercept Sell CTA
+            const sellCta = mkWindow.querySelector('button.market-cta');
+            if (sellCta && !sellCta.dataset.intercepted) {
+                const reactPropsKey = Object.keys(sellCta).find(k => k.startsWith('__reactProps$'));
+                if (reactPropsKey && sellCta[reactPropsKey] && sellCta[reactPropsKey].onClick) {
+                    const origClick = sellCta[reactPropsKey].onClick;
+                    sellCta[reactPropsKey].onClick = (e) => {
+                        const confirmList = getSellConfirmItems();
+                        const selectedToConfirm = [];
+                        mkWindow.querySelectorAll('.mk-row.mk-srow-head').forEach(row => {
+                            const cb = row.querySelector('input.mk-check');
+                            if (cb && cb.checked) {
+                                const nameEl = row.querySelector('.mk-name');
+                                const itemName = nameEl ? nameEl.textContent.trim() : '';
+                                if (confirmList.includes(itemName)) {
+                                    selectedToConfirm.push(itemName);
+                                }
+                            }
+                        });
+                        if (selectedToConfirm.length > 0) {
+                            showSellConfirm(selectedToConfirm, (confirmed) => {
+                                if (confirmed) origClick(e);
+                            });
+                        } else {
+                            origClick(e);
+                        }
+                    };
+                    sellCta.dataset.intercepted = 'true';
+                }
+            }
+        }
+        
+        // 2. Pokemon Tab: Rarity select all limit
+        const isPokeTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Pokémon'));
+        if (isPokeTab) {
+            const selectAllBtn = Array.from(mkWindow.querySelectorAll('button.mk-tab')).find(b => b.textContent.includes('Select all') && !b.dataset.intercepted) || Array.from(mkWindow.querySelectorAll('button')).find(b => b.className.includes('selall') && !b.dataset.intercepted);
+            if (selectAllBtn) {
+                const reactPropsKey = Object.keys(selectAllBtn).find(k => k.startsWith('__reactProps$'));
+                if (reactPropsKey && selectAllBtn[reactPropsKey] && selectAllBtn[reactPropsKey].onClick) {
+                    const origClick = selectAllBtn[reactPropsKey].onClick;
+                    selectAllBtn[reactPropsKey].onClick = (e) => {
+                        origClick(e);
+                        setTimeout(() => {
+                            mkWindow.querySelectorAll('.mk-row.mk-srow-head').forEach(row => {
+                                const rarity = getPokemonRarity(row);
+                                const forbidden = ['lendária', 'mítica', 'divina'];
+                                if (rarity && forbidden.some(r => rarity.includes(r))) {
+                                    const cb = row.querySelector('input.mk-check');
+                                    if (cb && cb.checked) cb.click();
+                                }
+                            });
+                        }, 50);
+                    };
+                    selectAllBtn.dataset.intercepted = 'true';
+                }
+            }
+        }
+    }
+
     const observer = new MutationObserver(() => {
         injectQuickTPButton();
         injectConfigTab();
         applyChatState();
+        injectShopEnhancements();
 
         const mapWindow = document.querySelector('.map-window');
         if (mapWindow) {
