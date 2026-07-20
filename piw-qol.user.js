@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.1.3
+// @version      9.1.4
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -570,15 +570,22 @@
                         </div>
                     </div>
 
-                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
-                        <div class="cfg-label" style="margin-bottom: 6px;">
+                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0; display:flex; gap:12px; align-items:flex-start;">
+                        <div class="cfg-label" style="flex:1;">
                             <b style="color: #e2e8f0; font-size: 14px;">Sell Confirmation Items</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Itens protegidos. Busque abaixo para adicionar.</span>
+                            <span style="color: #a0aec0; font-size: 11px; display:block; margin-top:4px;">Itens protegidos. Busque ao lado para adicionar.</span>
                         </div>
-                        <div id="cfg-sell-selected-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; min-height:30px; padding:6px; background:#0c161f; border-radius:4px; border:1px solid #273f52;">
+                        
+                        <div id="cfg-sell-selected-list" style="flex:1; display:flex; flex-direction:column; gap:4px; max-height:120px; overflow-y:auto; padding-right:4px;">
                         </div>
-                        <input type="text" id="cfg-sell-search" placeholder="Buscar item para proteger..." style="width:100%; box-sizing:border-box; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; border-radius:4px; padding:6px 10px; outline:none; margin-bottom:6px;">
-                        <div id="cfg-sell-dropdown" style="max-height:160px; overflow-y:auto; background:#0c161f; border:1px solid #273f52; border-radius:4px; display:none;">
+                        
+                        <div style="flex:1; position:relative; min-width:180px;">
+                            <button type="button" id="cfg-sell-dd-btn" style="width:100%; text-align:left; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; padding:6px 10px; border-radius:4px; cursor:pointer;">Selecionar Itens ▾</button>
+                            <div id="cfg-sell-dropdown-menu" style="display:none; position:absolute; top:100%; right:0; width:100%; background:#14222d; border:1px solid #273f52; border-radius:4px; z-index:10; box-shadow:0 4px 6px rgba(0,0,0,0.3); margin-top:4px; padding:6px; box-sizing:border-box;">
+                                <input type="text" id="cfg-sell-search" placeholder="Buscar..." style="width:100%; box-sizing:border-box; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; border-radius:4px; padding:6px; outline:none; margin-bottom:6px;">
+                                <div id="cfg-sell-dropdown" style="max-height:150px; overflow-y:auto;">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -606,8 +613,25 @@
             modsContent.querySelector('.btn-chat-off').addEventListener('click', () => { setChatActive(false); updateModsUI(); });
 
             const selectedListEl = modsContent.querySelector('#cfg-sell-selected-list');
+            const ddBtn = modsContent.querySelector('#cfg-sell-dd-btn');
+            const ddMenu = modsContent.querySelector('#cfg-sell-dropdown-menu');
             const searchInputEl = modsContent.querySelector('#cfg-sell-search');
             const dropdownEl = modsContent.querySelector('#cfg-sell-dropdown');
+
+            ddBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                ddMenu.style.display = ddMenu.style.display === 'none' ? 'block' : 'none';
+                if (ddMenu.style.display === 'block') {
+                    renderDropdown();
+                    searchInputEl.focus();
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!ddMenu.contains(e.target) && e.target !== ddBtn) {
+                    ddMenu.style.display = 'none';
+                }
+            });
 
             const uniqueItems = [];
             const seenNames = new Set();
@@ -629,16 +653,22 @@
                     items.forEach(itemName => {
                         const iconHTML = resolveItemIcon(itemName);
                         const tag = document.createElement('div');
-                        tag.style = 'display:inline-flex; align-items:center; background:#1a2d3a; border:1px solid #2b4c66; padding:2px 6px; border-radius:4px; font-size:12px;';
-                        tag.innerHTML = `${iconHTML} <span style="margin-right:6px; color:#e2e8f0;">${itemName}</span>`;
+                        tag.style = 'display:flex; justify-content:space-between; align-items:center; background:#1a2d3a; border:1px solid #2b4c66; padding:4px 8px; border-radius:4px; font-size:12px;';
+                        
+                        const leftDiv = document.createElement('div');
+                        leftDiv.style = 'display:flex; align-items:center; gap:6px; color:#e2e8f0;';
+                        leftDiv.innerHTML = `${iconHTML} <span>${itemName}</span>`;
+                        
                         const rmBtn = document.createElement('span');
                         rmBtn.innerHTML = '×';
                         rmBtn.style = 'cursor:pointer; color:#f56565; font-weight:bold; font-size:14px;';
                         rmBtn.addEventListener('click', () => {
                             setSellConfirmItems(items.filter(i => i !== itemName));
                             renderSelected();
-                            renderDropdown();
+                            if (ddMenu.style.display === 'block') renderDropdown();
                         });
+                        
+                        tag.appendChild(leftDiv);
                         tag.appendChild(rmBtn);
                         selectedListEl.appendChild(tag);
                     });
@@ -648,20 +678,17 @@
             function renderDropdown() {
                 const query = searchInputEl.value.toLowerCase().trim();
                 const selectedItems = getSellConfirmItems();
-                if (!query) {
-                    dropdownEl.style.display = 'none';
-                    return;
-                }
-                dropdownEl.style.display = 'block';
                 dropdownEl.innerHTML = '';
-                const filtered = uniqueItems.filter(item => (item.name || item.title).toLowerCase().includes(query)).slice(0, 30);
                 
-                if (filtered.length === 0) {
+                const filtered = query ? uniqueItems.filter(item => (item.name || item.title).toLowerCase().includes(query)) : uniqueItems;
+                const toShow = filtered.slice(0, 50);
+
+                if (toShow.length === 0) {
                     dropdownEl.innerHTML = '<div style="padding:6px; color:#718096; font-size:12px; text-align:center;">Nenhum item encontrado</div>';
                     return;
                 }
                 
-                filtered.forEach(item => {
+                toShow.forEach(item => {
                     const itemName = item.name || item.title;
                     const isChecked = selectedItems.includes(itemName);
                     const iconHTML = resolveItemIcon(itemName);
