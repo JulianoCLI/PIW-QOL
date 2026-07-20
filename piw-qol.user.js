@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.6
+// @version      9.4.7
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -379,6 +379,7 @@
         .ha-sbtn:hover { background: #3182ce; color: #fff; border-color: #3182ce; }
         .ha-catch-stats { display: block; width: 100%; text-align: center; margin-top: 4px; }
         .ha-catch-stats.hidden { display: none !important; }
+        .ha-rates { flex-wrap: wrap !important; }
 
         /* Compare Modal */
         .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10000; display: flex; align-items: center; justify-content: center; pointer-events: none; }
@@ -386,9 +387,12 @@
         .ha-compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .ha-compare-table th { text-align: center; padding: 8px; color: #a0aec0; border-bottom: 1px solid #273f52; font-weight: normal; }
         .ha-compare-table td { padding: 8px; border-bottom: 1px solid #1a2d3a; text-align: center; font-weight: bold; }
+        .ha-compare-table tr:nth-child(even) { background-color: rgba(255, 255, 255, 0.03); }
         .ha-compare-table td:first-child { text-align: left; font-weight: normal; color: #a0aec0; }
         .ha-compare-winner { color: #48bb78 !important; }
         .ha-compare-loser { color: #f56565 !important; }
+        .ha-compare-modal .ha-title { cursor: grab; user-select: none; }
+        .ha-compare-modal .ha-title:active { cursor: grabbing; }
     `;
     document.head.appendChild(style);
 
@@ -1301,12 +1305,8 @@
     }
 
     function showCompareModal() {
-        if (!lastHuntSnapshot) {
-            alert('Não há dados da Hunt anterior para comparar. Mude de hunt ou zere o analyzer para gerar o histórico.');
-            return;
-        }
-        const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0 };
-        const last = lastHuntSnapshot;
+        const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, locName: 'Nenhuma' };
+        const last = lastHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, locName: 'Nenhuma' };
 
         const cmp = (a, b) => {
             if (a > b) return ['ha-compare-winner', 'ha-compare-loser'];
@@ -1333,7 +1333,7 @@
         const backdrop = document.createElement('div');
         backdrop.className = 'ha-compare-backdrop';
         backdrop.innerHTML = `
-            <div class="ha-window ha-compare-modal">
+            <div class="ha-window ha-compare-modal" style="position: relative; box-shadow: 0 12px 32px rgba(0,0,0,0.8);">
                 <div class="ha-title">
                     <span>⚖️ Comparação de Hunts</span>
                     <button class="ha-x ha-compare-close" aria-label="Close" type="button">×</button>
@@ -1341,15 +1341,40 @@
                 <div style="padding: 12px;">
                     <table class="ha-compare-table">
                         <tr><th>Métrica</th><th>${lastTitle}</th><th>${currTitle}</th></tr>
-                        <tr><td>Balance Total</td><td class="${balLast}">${formatBal(last.balance)}</td><td class="${balCurr}">${formatBal(curr.balance)}</td></tr>
-                        <tr><td>XP/h</td><td class="${xpLast}">${formatNumber(last.xpHour)}</td><td class="${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
-                        <tr><td>Tempo</td><td>${last.timeText}</td><td>${curr.timeText}</td></tr>
-                        <tr><td>Defeated</td><td>${last.defeated}</td><td>${curr.defeated}</td></tr>
+                        <tr><td>💰 Balance Total</td><td class="${balLast}">${formatBal(last.balance)}</td><td class="${balCurr}">${formatBal(curr.balance)}</td></tr>
+                        <tr><td>✨ XP/h</td><td class="${xpLast}">${formatNumber(last.xpHour)}</td><td class="${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
+                        <tr><td>⏱️ Tempo</td><td>${last.timeText}</td><td>${curr.timeText}</td></tr>
+                        <tr><td>⚔️ Defeated</td><td>${last.defeated}</td><td>${curr.defeated}</td></tr>
                     </table>
                 </div>
             </div>
         `;
         document.body.appendChild(backdrop);
+
+        // Make modal draggable
+        let isDragging = false, startX, startY, initialX = 0, initialY = 0;
+        const modal = backdrop.querySelector('.ha-compare-modal');
+        const titleBar = modal.querySelector('.ha-title');
+        
+        titleBar.addEventListener('mousedown', e => {
+            if (e.target.closest('.ha-compare-close')) return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+        });
+        document.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            modal.style.transform = `translate(${initialX + dx}px, ${initialY + dy}px)`;
+        });
+        document.addEventListener('mouseup', e => {
+            if (!isDragging) return;
+            isDragging = false;
+            initialX += e.clientX - startX;
+            initialY += e.clientY - startY;
+        });
+
         backdrop.querySelector('.ha-compare-close').addEventListener('click', () => backdrop.remove());
     }
 
