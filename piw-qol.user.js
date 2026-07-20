@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.0.1
+// @version      9.0.2
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -674,7 +674,7 @@
                 huntDataList = huntDataList.filter(hunt => hunt.name.toLowerCase().includes(query));
             }
 
-            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select'].value : 'fav';
+            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'fav';
             huntDataList.sort((a, b) => {
                 if (sortVal === 'price_desc') return b.numericPrice - a.numericPrice;
                 if (sortVal === 'price_asc') return a.numericPrice - b.numericPrice;
