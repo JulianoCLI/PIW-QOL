@@ -1,0 +1,683 @@
+// ==UserScript==
+// @name         Pokémon Map & Hunt Enhancer Pro
+// @namespace    http://tampermonkey.net/
+// @version      8.5
+// @description  Otimização de valor de venda, mod do preview de drops (Hover, ?, Off), filtros por vantagem de tipo (Outland rules), catch rate e expansão universal de tipos via JSON.
+// @author       Desjunior (JulianoCLI)
+// @match        https://poke.idleworld.online/play
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const STORAGE_FAVS = 'hunts_favoritas_v1';
+    const STORAGE_LAST_HUNT = 'ultima_hunt_v1';
+    const STORAGE_SCRIPT_ACTIVE = 'script_mapa_ativo_v1';
+    const STORAGE_CHAT_ACTIVE = 'script_chat_ativo_v1';
+    const STORAGE_NAV_MODE = 'script_nav_tp_mode_v1';
+    const STORAGE_DROP_MODE = 'script_drop_mode_v1'; // 'hover', 'icon', 'off'
+
+    let isRendering = false;
+    const huntDataCache = new Map(); // Cache para guardar SellsFor e Drops extraídos do .map-tip
+
+    // URL do JSON externo no GitHub para os tipos dos Pokémons (expansível para 198+ pokémons e novos mapas)
+    const POKEMON_TYPES_JSON_URL = 'https://raw.githubusercontent.com/seu-usuario/seu-repositorio/main/pokemons-types.json';
+
+    // --- TABELA COMPACTA DE TIPOS POKÉMON ---
+    const TYPE_CHART = {
+        normal: { rock: 0.5, ghost: 0, steel: 0.5 },
+        fire: { fire: 0.5, water: 0.5, grass: 2, ice: 2, bug: 2, rock: 0.5, dragon: 0.5, steel: 2 },
+        water: { fire: 2, water: 0.5, grass: 0.5, ground: 2, rock: 2, dragon: 0.5 },
+        electric: { water: 2, electric: 0.5, grass: 0.5, ground: 0, flying: 2, dragon: 0.5 },
+        grass: { fire: 0.5, water: 2, grass: 0.5, poison: 0.5, ground: 2, flying: 0.5, bug: 0.5, rock: 2, dragon: 0.5, steel: 0.5 },
+        ice: { fire: 0.5, water: 0.5, grass: 2, ice: 0.5, ground: 2, flying: 2, dragon: 2, steel: 0.5 },
+        fighting: { normal: 2, ice: 2, poison: 0.5, flying: 0.5, psychic: 0.5, bug: 0.5, rock: 2, ghost: 0, dark: 2, steel: 2 },
+        poison: { grass: 2, poison: 0.5, ground: 0.5, rock: 0.5, ghost: 0.5, steel: 0 },
+        ground: { fire: 2, electric: 2, grass: 0.5, poison: 2, flying: 0, bug: 0.5, rock: 2, steel: 2 },
+        flying: { electric: 0.5, grass: 2, fighting: 2, bug: 2, rock: 0.5, steel: 0.5 },
+        psychic: { fighting: 2, poison: 2, psychic: 0.5, dark: 0, steel: 0.5 },
+        bug: { fire: 0.5, grass: 2, fighting: 0.5, poison: 0.5, flying: 0.5, psychic: 2, ghost: 0.5, dark: 2, steel: 0.5 },
+        rock: { fire: 2, ice: 2, fighting: 0.5, ground: 0.5, flying: 2, bug: 2, steel: 0.5 },
+        ghost: { normal: 0, psychic: 2, ghost: 2, dark: 0.5 },
+        dragon: { dragon: 2, steel: 0.5 },
+        dark: { fighting: 0.5, psychic: 2, ghost: 2, dark: 0.5 },
+        steel: { fire: 0.5, water: 0.5, electric: 0.5, ice: 2, rock: 2, steel: 0.5 }
+    };
+
+    // --- BASE DE TIPOS (FALLBACK + DINÂMICO) ---
+    const BASE_POKEMON_TYPES = {
+        "magneton": ["electric", "steel"], "charizard": ["fire", "flying"], "blastoise": ["water"],
+        "venusaur": ["grass", "poison"], "pikachu": ["electric"], "alakazam": ["psychic"],
+        "gengar": ["ghost", "poison"], "dragonite": ["dragon", "flying"], "gyarados": ["water", "flying"],
+        "arcanine": ["fire"], "scyther": ["bug", "flying"], "golem": ["rock", "ground"],
+        "snorlax": ["normal"], "lapras": ["water", "ice"], "machamp": ["fighting"],
+        "pinsir": ["bug"], "eevee": ["normal"], "vaporeon": ["water"], "jolteon": ["electric"], "flareon": ["fire"]
+    };
+
+    let POKEMON_TYPES = { ...BASE_POKEMON_TYPES };
+
+    // Carregamento dinâmico opcional do GitHub para abranger todos os 198+ pokémons
+    async function loadExternalPokemonTypes() {
+        try {
+            const response = await fetch(POKEMON_TYPES_JSON_URL);
+            if (response.ok) {
+                const data = await response.json();
+                POKEMON_TYPES = { ...POKEMON_TYPES, ...data };
+            }
+        } catch (e) {
+            console.warn("⚠️ Usando tipos locais padrão (fallback).");
+        }
+    }
+    loadExternalPokemonTypes();
+
+    // Regra de Outland para Vantagens Elementais (Suporte a 0.33x, 5.5x, etc.)
+    function applyOutlandModifier(baseMultiplier) {
+        if (baseMultiplier === 1.5) return 1.75;
+        if (baseMultiplier === 2.0) return 2.50;
+        if (baseMultiplier >= 4.0) return 5.50;
+        if (baseMultiplier === 0.5) return 0.33;
+        return baseMultiplier; // Neutral (1) and Immunities (0) stay same
+    }
+
+    function getOffensiveMultiplier(attackerTypes, defenderTypes) {
+        let maxMult = 1.0;
+        attackerTypes.forEach(attType => {
+            let mult = 1.0;
+            defenderTypes.forEach(defType => {
+                const chart = TYPE_CHART[attType];
+                if (chart && chart[defType] !== undefined) {
+                    mult *= chart[defType];
+                }
+            });
+            if (mult > maxMult) maxMult = mult;
+        });
+        return applyOutlandModifier(maxMult);
+    }
+
+    // --- ESTILOS DINÂMICOS & CORREÇÃO DE LAYOUT (Kanto / Buraco Preto) ---
+    const style = document.createElement('style');
+    style.id = 'simplifier-dynamic-styles';
+    style.innerHTML = `
+        .promo-overlay { display: none !important; }
+        #dock-btn-quick-tp {
+            background: rgba(49, 130, 206, 0.2);
+            border: 1px solid #3182ce;
+            color: #ffcc00;
+            font-size: 16px; font-weight: bold;
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease;
+        }
+        #dock-btn-quick-tp:hover { background: rgba(49, 130, 206, 0.5); transform: scale(1.08); }
+
+        .hunt-drop-tooltip {
+            position: absolute; background: #081017; border: 1px solid #2b4c66;
+            border-radius: 4px; padding: 6px 10px; z-index: 9999; font-size: 12px;
+            color: #e2e8f0; pointer-events: none; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .drop-icon-btn {
+            background: #1a2b3c; border: 1px solid #3182ce; color: #63b3ed;
+            border-radius: 50%; width: 20px; height: 20px; font-size: 11px;
+            display: inline-flex; align-items: center; justify-content: center;
+            cursor: pointer; margin-left: 6px;
+        }
+
+        /* Correção Completa do Layout do Mapa - Remove buraco preto e ocupa 100% da largura */
+        .map-window {
+            display: flex !important;
+            flex-direction: column !important;
+            width: 780px !important;
+            max-width: 95vw !important;
+            height: 620px !important;
+            background: #181a20 !important;
+            color: #fff !important;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .map-window .map-body {
+            flex: 1 !important;
+            width: 100% !important;
+            height: 100% !important;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Master Switches - Desativação visual de sub-opções dependentes */
+        .mod-disabled {
+            opacity: 0.35 !important;
+            pointer-events: none !important;
+            filter: grayscale(100%);
+        }
+    `;
+    document.head.appendChild(style);
+
+    const styleMapMod = document.createElement('style');
+    styleMapMod.id = 'simplifier-map-override';
+    styleMapMod.innerHTML = `
+        .map-viewport, .map-img, .map-zoom { display: none !important; }
+        .map-body { width: 100% !important; max-width: 100% !important; padding: 0 !important; background: transparent !important; }
+        .hunt-marker { opacity: 0 !important; position: absolute !important; pointer-events: none !important; }
+    `;
+
+    // --- CONTROLE DE CONFIGURAÇÕES ---
+    function isScriptMapActive() { return localStorage.getItem(STORAGE_SCRIPT_ACTIVE) !== 'false'; }
+    function setScriptMapActive(state) { localStorage.setItem(STORAGE_SCRIPT_ACTIVE, state ? 'true' : 'false'); applyMapScriptState(); }
+
+    function isChatActive() { return localStorage.getItem(STORAGE_CHAT_ACTIVE) !== 'false'; }
+    function setChatActive(state) { localStorage.setItem(STORAGE_CHAT_ACTIVE, state ? 'true' : 'false'); applyChatState(); }
+
+    function getNavTpMode() { return localStorage.getItem(STORAGE_NAV_MODE) || 'fav'; }
+    function setNavTpMode(mode) { localStorage.setItem(STORAGE_NAV_MODE, mode); updateNavButtonAppearance(); }
+
+    function getDropMode() { return localStorage.getItem(STORAGE_DROP_MODE) || 'hover'; } // 'hover', 'icon', 'off'
+    function setDropMode(mode) { localStorage.setItem(STORAGE_DROP_MODE, mode); buildSimpleList(); }
+
+    function applyMapScriptState() {
+        const active = isScriptMapActive();
+        const existingContainer = document.getElementById('simple-hunts-container');
+        if (active) {
+            if (!document.getElementById('simplifier-map-override')) document.head.appendChild(styleMapMod);
+            if (existingContainer) existingContainer.style.display = 'block';
+            buildSimpleList();
+        } else {
+            if (document.getElementById('simplifier-map-override')) styleMapMod.remove();
+            if (existingContainer) existingContainer.style.display = 'none';
+        }
+    }
+
+    function applyChatState() {
+        const active = isChatActive();
+        const chatFab = document.querySelector('.chat-fab');
+        const chatBox = document.querySelector('.chat-box');
+        if (chatFab) chatFab.style.display = active ? '' : 'none';
+        if (chatBox) chatBox.style.display = active ? '' : 'none';
+    }
+
+    function getFavorites() {
+        const favs = localStorage.getItem(STORAGE_FAVS);
+        return favs ? JSON.parse(favs) : [];
+    }
+
+    function toggleFavorite(huntName) {
+        let favs = getFavorites();
+        if (favs.includes(huntName)) favs = favs.filter(name => name !== huntName);
+        else favs.push(huntName);
+        localStorage.setItem(STORAGE_FAVS, JSON.stringify(favs));
+        buildSimpleList();
+    }
+
+    function saveLastHunt(huntName) {
+        if (huntName && huntName !== 'Sem Nome') localStorage.setItem(STORAGE_LAST_HUNT, huntName);
+    }
+    function getLastHunt() { return localStorage.getItem(STORAGE_LAST_HUNT) || null; }
+
+    function getActivePokemonName() {
+        const nameEl = document.querySelector('.phud-name');
+        return nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+    }
+
+    // --- LEITURA E SCRAPING DA TOOLTIP DA HUNT (.map-tip) ---
+    function extractHuntDetailsFromTooltip(marker, name) {
+        if (huntDataCache.has(name)) return huntDataCache.get(name);
+
+        let sellsFor = 'Indisponível';
+        let dropsHTML = '';
+
+        marker.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+
+        const mapTip = document.querySelector('.map-tip');
+        if (mapTip) {
+            const sellEl = mapTip.querySelector('.map-tip-sell b');
+            if (sellEl) sellsFor = '$ ' + sellEl.textContent.trim();
+
+            const dropsEl = mapTip.querySelector('.map-tip-drops');
+            if (dropsEl) dropsHTML = dropsEl.innerHTML;
+        }
+
+        marker.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+
+        const data = { sellsFor, dropsHTML };
+        if (sellsFor !== 'Indisponível') huntDataCache.set(name, data);
+        return data;
+    }
+
+    // --- TELEPORTES ---
+    function teleportToTarget(huntName) {
+        if (!huntName) return alert('Nenhuma hunt definida!');
+        const mapBtn = document.querySelector('button[data-guide="dock-map"]');
+        let markers = Array.from(document.querySelectorAll('.hunt-marker'));
+
+        if (markers.length === 0 && mapBtn) mapBtn.click();
+
+        setTimeout(() => {
+            markers = Array.from(document.querySelectorAll('.hunt-marker'));
+            const targetMarker = markers.find(m => {
+                const nameEl = m.querySelector('.hunt-name');
+                return nameEl && nameEl.textContent.trim().toLowerCase() === huntName.toLowerCase();
+            });
+            if (targetMarker) targetMarker.click();
+            else alert(`Hunt "${huntName}" não foi localizada.`);
+        }, 150);
+    }
+
+    function teleportToFavorite() {
+        const favs = getFavorites();
+        if (favs.length === 0) return alert('Você não possui nenhuma hunt favorita!');
+        teleportToTarget(favs[0]);
+    }
+
+    function teleportToLastHunt() {
+        const last = getLastHunt();
+        if (!last) return alert('Nenhuma última hunt registrada ainda.');
+        teleportToTarget(last);
+    }
+
+    function handleNavQuickTP() {
+        if (getNavTpMode() === 'fav') teleportToFavorite();
+        else teleportToLastHunt();
+    }
+
+    function updateNavButtonAppearance() {
+        const tpBtn = document.getElementById('dock-btn-quick-tp');
+        if (!tpBtn) return;
+        const mode = getNavTpMode();
+        tpBtn.innerHTML = mode === 'fav' ? '★' : '↺';
+        tpBtn.title = mode === 'fav' ? 'Teleportar para Hunt Favorita' : 'Teleportar para Última Hunt';
+    }
+
+    function injectQuickTPButton() {
+        if (document.getElementById('dock-btn-quick-tp')) return;
+        const gameDock = document.querySelector('nav.game-dock');
+        if (gameDock) {
+            const tpBtn = document.createElement('button');
+            tpBtn.id = 'dock-btn-quick-tp';
+            tpBtn.className = 'dock-btn dock-btn-custom';
+            tpBtn.type = 'button';
+            tpBtn.addEventListener('click', handleNavQuickTP);
+
+            const mapBtn = gameDock.querySelector('button[data-guide="dock-map"]');
+            if (mapBtn && mapBtn.nextSibling) gameDock.insertBefore(tpBtn, mapBtn.nextSibling);
+            else gameDock.appendChild(tpBtn);
+            updateNavButtonAppearance();
+        }
+    }
+
+    // --- ABA SCRIPT MODS NAS CONFIGURAÇÕES (.cfg-window) COM MASTER SWITCHES ---
+    function injectConfigTab() {
+        const cfgWindow = document.querySelector('.cfg-window');
+        if (!cfgWindow || cfgWindow.querySelector('.cfg-tab-mods')) return;
+
+        const cfgTabs = cfgWindow.querySelector('.cfg-tabs');
+        const cfgBody = cfgWindow.querySelector('.cfg-body');
+        if (!cfgTabs || !cfgBody) return;
+
+        const modsTab = document.createElement('button');
+        modsTab.className = 'cfg-tab cfg-tab-mods';
+        modsTab.type = 'button';
+        modsTab.textContent = 'Script Mods';
+
+        let originalContent = cfgBody.querySelector('.cfg-original-content');
+        if (!originalContent) {
+            originalContent = document.createElement('div');
+            originalContent.className = 'cfg-original-content';
+            while (cfgBody.firstChild) originalContent.appendChild(cfgBody.firstChild);
+            cfgBody.appendChild(originalContent);
+        }
+
+        let modsContent = cfgBody.querySelector('.cfg-mods-content');
+        if (!modsContent) {
+            modsContent = document.createElement('div');
+            modsContent.className = 'cfg-mods-content';
+            modsContent.style.display = 'none';
+            cfgBody.appendChild(modsContent);
+        }
+
+        cfgTabs.appendChild(modsTab);
+
+        function updateModsUI() {
+            const mapActive = isScriptMapActive();
+            const chatActiveState = isChatActive();
+            const navMode = getNavTpMode();
+            const dropMode = getDropMode();
+
+            modsContent.innerHTML = `
+                <div class="cfg-row">
+                    <div class="cfg-label">
+                        <b>Nav Dock Button Action</b>
+                        <span>Ação do botão de teleport rápido na barra do jogo</span>
+                    </div>
+                    <div class="cfg-seg">
+                        <button class="cfg-seg-btn ${navMode === 'fav' ? 'on' : ''} btn-nav-fav" type="button">★ Favorita</button>
+                        <button class="cfg-seg-btn ${navMode === 'last' ? 'on' : ''} btn-nav-last" type="button">↺ Última Hunt</button>
+                    </div>
+                </div>
+                <div class="cfg-row">
+                    <div class="cfg-label">
+                        <b>Drops Preview Mode</b>
+                        <span>Modo 1: Hover no card | Modo 2: Ícone (?) | Modo 3: Oculto</span>
+                    </div>
+                    <div class="cfg-seg">
+                        <button class="cfg-seg-btn ${dropMode === 'hover' ? 'on' : ''} btn-drop-hover" type="button">Hover</button>
+                        <button class="cfg-seg-btn ${dropMode === 'icon' ? 'on' : ''} btn-drop-icon" type="button">Ícone (?)</button>
+                        <button class="cfg-seg-btn ${dropMode === 'off' ? 'on' : ''} btn-drop-off" type="button">Off</button>
+                    </div>
+                </div>
+                <div class="cfg-row">
+                    <div class="cfg-label">
+                        <b>Simplified Map Mode (Master Switch)</b>
+                        <span>Ativa a lista limpa ou restaura a exibição gráfica nativa do mapa</span>
+                    </div>
+                    <div class="cfg-seg">
+                        <button class="cfg-seg-btn ${mapActive ? 'on' : ''} btn-map-on" type="button">On</button>
+                        <button class="cfg-seg-btn ${!mapActive ? 'on' : ''} btn-map-off" type="button">Off</button>
+                    </div>
+                </div>
+                <div class="cfg-row ${!mapActive ? 'mod-disabled' : ''}" id="sub-map-feature-row">
+                    <div class="cfg-label">
+                        <b>Filtros e Vantagem de Tipos (Outland)</b>
+                        <span>Cálculos avançados integrados ao mapa simplificado</span>
+                    </div>
+                    <div class="cfg-seg">
+                        <span style="font-size:12px; color:#48bb78; font-weight:bold;">Ativo c/ Mapa On</span>
+                    </div>
+                </div>
+                <div class="cfg-row">
+                    <div class="cfg-label">
+                        <b>Chat Interface</b>
+                        <span>Exibe ou oculta completamente a janela de chat</span>
+                    </div>
+                    <div class="cfg-seg">
+                        <button class="cfg-seg-btn ${chatActiveState ? 'on' : ''} btn-chat-on" type="button">On</button>
+                        <button class="cfg-seg-btn ${!chatActiveState ? 'on' : ''} btn-chat-off" type="button">Off</button>
+                    </div>
+                </div>
+            `;
+
+            modsContent.querySelector('.btn-nav-fav').addEventListener('click', () => { setNavTpMode('fav'); updateModsUI(); });
+            modsContent.querySelector('.btn-nav-last').addEventListener('click', () => { setNavTpMode('last'); updateModsUI(); });
+
+            modsContent.querySelector('.btn-drop-hover').addEventListener('click', () => { setDropMode('hover'); updateModsUI(); });
+            modsContent.querySelector('.btn-drop-icon').addEventListener('click', () => { setDropMode('icon'); updateModsUI(); });
+            modsContent.querySelector('.btn-drop-off').addEventListener('click', () => { setDropMode('off'); updateModsUI(); });
+
+            modsContent.querySelector('.btn-map-on').addEventListener('click', () => {
+                setScriptMapActive(true);
+                document.getElementById('sub-map-feature-row').classList.remove('mod-disabled');
+                updateModsUI();
+            });
+            modsContent.querySelector('.btn-map-off').addEventListener('click', () => {
+                setScriptMapActive(false);
+                document.getElementById('sub-map-feature-row').classList.add('mod-disabled');
+                updateModsUI();
+            });
+
+            modsContent.querySelector('.btn-chat-on').addEventListener('click', () => { setChatActive(true); updateModsUI(); });
+            modsContent.querySelector('.btn-chat-off').addEventListener('click', () => { setChatActive(false); updateModsUI(); });
+        }
+
+        const tabsList = Array.from(cfgTabs.querySelectorAll('.cfg-tab'));
+        tabsList.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabsList.forEach(t => t.classList.remove('on'));
+                tab.classList.add('on');
+                if (tab.classList.contains('cfg-tab-mods')) {
+                    originalContent.style.display = 'none';
+                    modsContent.style.display = 'block';
+                    updateModsUI();
+                } else {
+                    modsContent.style.display = 'none';
+                    originalContent.style.display = 'block';
+                }
+            });
+        });
+    }
+
+    // --- RENDERIZAÇÃO DA LISTA SIMPLIFICADA DO MAPA ---
+    function buildSimpleList() {
+        if (!isScriptMapActive() || isRendering) return;
+        isRendering = true;
+
+        try {
+            const mapWindow = document.querySelector('.map-window');
+            const mapBody = document.querySelector('.map-body');
+
+            if (!mapWindow || !mapBody) { isRendering = false; return; }
+
+            // Adiciona barra de controles customizados (Filtro por Valor e Efetividade)
+            let customFilterBar = document.getElementById('custom-hunts-filter-bar');
+            if (!customFilterBar) {
+                customFilterBar = document.createElement('div');
+                customFilterBar.id = 'custom-hunts-filter-bar';
+                customFilterBar.style = `
+                    display: flex; gap: 8px; margin-top: 8px; margin-bottom: 4px; font-size: 12px;
+                `;
+                customFilterBar.innerHTML = `
+                    <select id="sort-hunts-select" style="background:#14222d; color:#e2e8f0; border:1px solid #273f52; padding:4px 8px; border-radius:4px; outline:none; flex-grow:1;">
+                        <option value="fav">Ordenar: Favoritos Primeiro</option>
+                        <option value="price_desc">Preço: Maior -> Menor</option>
+                        <option value="price_asc">Preço: Menor -> Maior</option>
+                        <option value="eff_desc">Efetividade: Maior Vantagem (Outland)</option>
+                    </select>
+                `;
+                mapBody.appendChild(customFilterBar);
+
+                document.getElementById('sort-hunts-select').addEventListener('change', () => {
+                    isRendering = false;
+                    buildSimpleList();
+                });
+            }
+
+            let simpleContainer = document.getElementById('simple-hunts-container');
+            if (!simpleContainer) {
+                simpleContainer = document.createElement('div');
+                simpleContainer.id = 'simple-hunts-container';
+                simpleContainer.style = `
+                    width: 100%; max-height: 480px; overflow-y: auto; background: #0d161d;
+                    border: 1px solid #1a2d3a; border-radius: 6px; padding: 12px;
+                    box-sizing: border-box; font-family: sans-serif; margin-top: 6px;
+                `;
+                mapBody.appendChild(simpleContainer);
+            }
+
+            simpleContainer.innerHTML = '';
+            if (mapWindow.classList.contains('invisible-check')) { isRendering = false; return; }
+
+            const searchInput = document.querySelector('.map-filter-q');
+            const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+            const markers = Array.from(document.querySelectorAll('.hunt-marker'));
+            const favorites = getFavorites();
+            const activePkmn = getActivePokemonName();
+            const activePkmnTypes = POKEMON_TYPES[activePkmn] || ["normal"];
+
+            let huntDataList = [];
+
+            markers.forEach(marker => {
+                const styleAttr = marker.getAttribute('style') || '';
+                if (styleAttr.includes('display: none') || styleAttr.includes('opacity: 0')) return;
+
+                const nameEl = marker.querySelector('.hunt-name');
+                const lvlEl = marker.querySelector('.hunt-lvl');
+                const iconDiv = marker.querySelector('.hunt-circle div[style*="background-image"]');
+
+                const name = nameEl ? nameEl.textContent.trim() : 'Sem Nome';
+                const lvlText = lvlEl ? lvlEl.textContent.trim() : 'Nv 1';
+                const isHere = marker.classList.contains('here');
+
+                if (isHere) saveLastHunt(name);
+
+                // Extração do valor ($ Sells for) e drops do mapa original
+                const details = extractHuntDetailsFromTooltip(marker, name);
+                const numericPrice = parseInt(details.sellsFor.replace(/\D/g, ''), 10) || 0;
+
+                // Efetividade do Pokémon ativo contra a Hunt
+                const defenderTypes = POKEMON_TYPES[name.toLowerCase()] || ["normal"];
+                const effectiveness = getOffensiveMultiplier(activePkmnTypes, defenderTypes);
+
+                huntDataList.push({
+                    name, lvlText, isHere,
+                    sellsFor: details.sellsFor,
+                    numericPrice,
+                    dropsHTML: details.dropsHTML,
+                    effectiveness,
+                    iconStyle: iconDiv ? (iconDiv.getAttribute('style') || '') : '',
+                    originalElement: marker
+                });
+            });
+
+            if (query) {
+                huntDataList = huntDataList.filter(hunt => hunt.name.toLowerCase().includes(query));
+            }
+
+            // Ordenação
+            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'fav';
+            huntDataList.sort((a, b) => {
+                if (sortVal === 'price_desc') return b.numericPrice - a.numericPrice;
+                if (sortVal === 'price_asc') return a.numericPrice - b.numericPrice;
+                if (sortVal === 'eff_desc') return b.effectiveness - a.effectiveness;
+
+                const aFav = favorites.includes(a.name);
+                const bFav = favorites.includes(b.name);
+                if (aFav && !bFav) return -1;
+                if (!aFav && bFav) return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+            if (huntDataList.length === 0) {
+                simpleContainer.innerHTML = `<div style="color: #718096; text-align: center; padding: 20px;">Nenhuma hunt encontrada.</div>`;
+                isRendering = false;
+                return;
+            }
+
+            const dropMode = getDropMode();
+
+            huntDataList.forEach(hunt => {
+                const isFav = favorites.includes(hunt.name);
+                const row = document.createElement('div');
+                row.style = `
+                    display: flex; align-items: center; justify-content: space-between;
+                    padding: 10px 14px; margin-bottom: 8px;
+                    background: ${hunt.isHere ? '#163126' : '#14222d'};
+                    border-left: 4px solid ${hunt.isHere ? '#4caf50' : (isFav ? '#3182ce' : '#273f52')};
+                    border-radius: 4px; color: #e2e8f0; font-size: 14px; cursor: pointer; position: relative;
+                `;
+
+                const spriteContainer = document.createElement('div');
+                spriteContainer.style = `
+                    width: 42px; height: 42px; min-width: 42px; overflow: hidden; display: flex;
+                    align-items: center; justify-content: center; background: #1c3040; border-radius: 50%; margin-right: 14px;
+                `;
+
+                if (hunt.iconStyle) {
+                    const sprite = document.createElement('div');
+                    sprite.style = hunt.iconStyle;
+                    spriteContainer.appendChild(sprite);
+                }
+
+                const infoDiv = document.createElement('div');
+                infoDiv.style = 'flex-grow: 1; margin-right: 12px;';
+                infoDiv.innerHTML = `
+                    <div style="font-weight: bold; color: ${isFav ? '#3182ce' : '#fff'}; display: flex; align-items: center; gap: 6px;">
+                        ${hunt.name}
+                        <span style="font-size: 11px; background: #243b4d; padding: 2px 6px; border-radius: 4px; color: #cbd5e0;">
+                            ${hunt.lvlText}
+                        </span>
+                        <span style="font-size: 11px; background: #1a365d; color: #63b3ed; padding: 2px 6px; border-radius: 4px;">
+                            ${hunt.effectiveness > 1 ? `⚡ ${hunt.effectiveness}x` : `${hunt.effectiveness}x`}
+                        </span>
+                        ${hunt.isHere ? '<span style="font-size: 11px; color: #4caf50; font-weight: bold;">[Aqui]</span>' : ''}
+                    </div>
+                    <div style="font-size: 12px; color: #48bb78; margin-top: 3px; font-weight: 500;">
+                        Valor: ${hunt.sellsFor}
+                    </div>
+                `;
+
+                // Ações do Drop Preview (Modo 1: Hover | Modo 2: Icone ? | Modo 3: Off)
+                if (dropMode === 'hover' && hunt.dropsHTML) {
+                    row.addEventListener('mouseenter', (e) => showDropTooltip(e, hunt.dropsHTML));
+                    row.addEventListener('mouseleave', hideDropTooltip);
+                }
+
+                row.addEventListener('click', (e) => {
+                    if (e.target.closest('button')) return;
+                    saveLastHunt(hunt.name);
+                    hunt.originalElement.click();
+                });
+
+                const actionContainer = document.createElement('div');
+                actionContainer.style = 'display: flex; align-items: center;';
+
+                if (dropMode === 'icon' && hunt.dropsHTML) {
+                    const iconBtn = document.createElement('button');
+                    iconBtn.type = 'button';
+                    iconBtn.className = 'drop-icon-btn';
+                    iconBtn.innerHTML = '?';
+                    iconBtn.addEventListener('mouseenter', (e) => showDropTooltip(e, hunt.dropsHTML));
+                    iconBtn.addEventListener('mouseleave', hideDropTooltip);
+                    actionContainer.appendChild(iconBtn);
+                }
+
+                const favBtn = document.createElement('button');
+                favBtn.type = 'button';
+                favBtn.innerHTML = isFav ? '★' : '☆';
+                favBtn.style = `
+                    background: none; border: none; color: ${isFav ? '#3182ce' : '#4a5568'};
+                    font-size: 20px; cursor: pointer; padding: 4px 8px; outline: none;
+                `;
+                favBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleFavorite(hunt.name);
+                });
+
+                actionContainer.appendChild(favBtn);
+
+                row.appendChild(spriteContainer);
+                row.appendChild(infoDiv);
+                row.appendChild(actionContainer);
+                simpleContainer.appendChild(row);
+            });
+
+        } catch (e) {
+            console.error("Erro no Simplificador de Mapa: ", e);
+        } finally {
+            isRendering = false;
+        }
+    }
+
+    // --- TOOLTIP FLUTUANTE DOS DROPS ---
+    let activeTooltip = null;
+    function showDropTooltip(e, dropsHTML) {
+        hideDropTooltip();
+        activeTooltip = document.createElement('div');
+        activeTooltip.className = 'hunt-drop-tooltip';
+        activeTooltip.innerHTML = `<b>Drops:</b><div style="margin-top:4px;">${dropsHTML}</div>`;
+        document.body.appendChild(activeTooltip);
+
+        const rect = e.target.getBoundingClientRect();
+        activeTooltip.style.top = `${rect.bottom + window.scrollY + 4}px`;
+        activeTooltip.style.left = `${rect.left + window.scrollX}px`;
+    }
+
+    function hideDropTooltip() {
+        if (activeTooltip) {
+            activeTooltip.remove();
+            activeTooltip = null;
+        }
+    }
+
+    // --- OBSERVER ---
+    const observer = new MutationObserver((mutations) => {
+        injectQuickTPButton();
+        injectConfigTab();
+        applyChatState();
+
+        const mapWindow = document.querySelector('.map-window');
+        if (mapWindow) {
+            setTimeout(buildSimpleList, 150);
+        }
+    });
+
+    applyMapScriptState();
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
