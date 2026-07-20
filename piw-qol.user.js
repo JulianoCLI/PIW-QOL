@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.1.2
+// @version      9.1.3
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -573,10 +573,13 @@
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
                             <b style="color: #e2e8f0; font-size: 14px;">Sell Confirmation Items</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Itens que pedirão confirmação (separados por vírgula)</span>
+                            <span style="color: #a0aec0; font-size: 11px;">Itens protegidos. Busque abaixo para adicionar.</span>
                         </div>
-                        <textarea id="cfg-sell-confirm" style="width:100%; height:60px; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; border-radius:4px; padding:6px; resize:none;">${sellConfirmItems.join(', ')}</textarea>
-                        <button type="button" id="btn-save-sell-confirm" style="margin-top:6px; background:#3182ce; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Salvar Lista</button>
+                        <div id="cfg-sell-selected-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; min-height:30px; padding:6px; background:#0c161f; border-radius:4px; border:1px solid #273f52;">
+                        </div>
+                        <input type="text" id="cfg-sell-search" placeholder="Buscar item para proteger..." style="width:100%; box-sizing:border-box; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; border-radius:4px; padding:6px 10px; outline:none; margin-bottom:6px;">
+                        <div id="cfg-sell-dropdown" style="max-height:160px; overflow-y:auto; background:#0c161f; border:1px solid #273f52; border-radius:4px; display:none;">
+                        </div>
                     </div>
                 </div>
             `;
@@ -602,16 +605,97 @@
             modsContent.querySelector('.btn-chat-on').addEventListener('click', () => { setChatActive(true); updateModsUI(); });
             modsContent.querySelector('.btn-chat-off').addEventListener('click', () => { setChatActive(false); updateModsUI(); });
 
-            const saveBtn = modsContent.querySelector('#btn-save-sell-confirm');
-            if (saveBtn) {
-                saveBtn.addEventListener('click', () => {
-                    const val = modsContent.querySelector('#cfg-sell-confirm').value;
-                    const arr = val.split(',').map(s => s.trim()).filter(s => s);
-                    setSellConfirmItems(arr);
-                    saveBtn.textContent = 'Salvo!';
-                    setTimeout(() => saveBtn.textContent = 'Salvar Lista', 1500);
+            const selectedListEl = modsContent.querySelector('#cfg-sell-selected-list');
+            const searchInputEl = modsContent.querySelector('#cfg-sell-search');
+            const dropdownEl = modsContent.querySelector('#cfg-sell-dropdown');
+
+            const uniqueItems = [];
+            const seenNames = new Set();
+            for (const item of globalItemApiData.values()) {
+                const name = item.name || item.title;
+                if (name && !seenNames.has(name)) {
+                    seenNames.add(name);
+                    uniqueItems.push(item);
+                }
+            }
+            uniqueItems.sort((a, b) => (a.name || a.title).localeCompare(b.name || b.title));
+
+            function renderSelected() {
+                const items = getSellConfirmItems();
+                selectedListEl.innerHTML = '';
+                if (items.length === 0) {
+                    selectedListEl.innerHTML = '<span style="color:#718096; font-size:12px; margin:auto;">Nenhum item protegido</span>';
+                } else {
+                    items.forEach(itemName => {
+                        const iconHTML = resolveItemIcon(itemName);
+                        const tag = document.createElement('div');
+                        tag.style = 'display:inline-flex; align-items:center; background:#1a2d3a; border:1px solid #2b4c66; padding:2px 6px; border-radius:4px; font-size:12px;';
+                        tag.innerHTML = `${iconHTML} <span style="margin-right:6px; color:#e2e8f0;">${itemName}</span>`;
+                        const rmBtn = document.createElement('span');
+                        rmBtn.innerHTML = '×';
+                        rmBtn.style = 'cursor:pointer; color:#f56565; font-weight:bold; font-size:14px;';
+                        rmBtn.addEventListener('click', () => {
+                            setSellConfirmItems(items.filter(i => i !== itemName));
+                            renderSelected();
+                            renderDropdown();
+                        });
+                        tag.appendChild(rmBtn);
+                        selectedListEl.appendChild(tag);
+                    });
+                }
+            }
+
+            function renderDropdown() {
+                const query = searchInputEl.value.toLowerCase().trim();
+                const selectedItems = getSellConfirmItems();
+                if (!query) {
+                    dropdownEl.style.display = 'none';
+                    return;
+                }
+                dropdownEl.style.display = 'block';
+                dropdownEl.innerHTML = '';
+                const filtered = uniqueItems.filter(item => (item.name || item.title).toLowerCase().includes(query)).slice(0, 30);
+                
+                if (filtered.length === 0) {
+                    dropdownEl.innerHTML = '<div style="padding:6px; color:#718096; font-size:12px; text-align:center;">Nenhum item encontrado</div>';
+                    return;
+                }
+                
+                filtered.forEach(item => {
+                    const itemName = item.name || item.title;
+                    const isChecked = selectedItems.includes(itemName);
+                    const iconHTML = resolveItemIcon(itemName);
+                    
+                    const row = document.createElement('label');
+                    row.style = 'display:flex; align-items:center; padding:6px 10px; cursor:pointer; border-bottom:1px solid #1a2d3a; font-size:13px;';
+                    row.addEventListener('mouseenter', () => row.style.background = '#14222d');
+                    row.addEventListener('mouseleave', () => row.style.background = 'transparent');
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = isChecked;
+                    cb.style.marginRight = '8px';
+                    cb.addEventListener('change', () => {
+                        let current = getSellConfirmItems();
+                        if (cb.checked && !current.includes(itemName)) current.push(itemName);
+                        else if (!cb.checked) current = current.filter(i => i !== itemName);
+                        setSellConfirmItems(current);
+                        renderSelected();
+                    });
+                    
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = itemName;
+                    nameSpan.style.color = '#e2e8f0';
+                    
+                    row.appendChild(cb);
+                    row.insertAdjacentHTML('beforeend', iconHTML);
+                    row.appendChild(nameSpan);
+                    dropdownEl.appendChild(row);
                 });
             }
+
+            searchInputEl.addEventListener('input', renderDropdown);
+            renderSelected();
         }
 
         const tabsList = Array.from(cfgTabs.querySelectorAll('.cfg-tab'));
