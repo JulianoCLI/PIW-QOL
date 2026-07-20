@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.8
+// @version      9.4.9
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1305,8 +1305,8 @@
     }
 
     function showCompareModal() {
-        const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, locName: 'Nenhuma' };
-        const last = lastHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, locName: 'Nenhuma' };
+        const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
+        const last = lastHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
 
         const cmp = (a, b) => {
             if (a > b) return ['ha-compare-winner', 'ha-compare-loser'];
@@ -1329,6 +1329,7 @@
         const [balhLast, balhCurr] = cmp(last.balHour, curr.balHour);
         const [xpLast, xpCurr] = cmp(last.xpHour, curr.xpHour);
         const [killsLast, killsCurr] = cmp(last.killsHour, curr.killsHour);
+        const [xpgLast, xpgCurr] = cmp(last.xpGained, curr.xpGained);
 
         const formatBal = (val) => val < 0 ? `-$${formatNumber(Math.abs(val))}` : `$${formatNumber(val)}`;
 
@@ -1345,6 +1346,7 @@
                         <tr><th>Métrica</th><th>${lastTitle}</th><th>${currTitle}</th></tr>
                         <tr><td>💰 Balance Total</td><td class="${balLast}">${formatBal(last.balance)}</td><td class="${balCurr}">${formatBal(curr.balance)}</td></tr>
                         <tr><td>📉 Balance/h</td><td class="${balhLast}">${formatBal(last.balHour)}</td><td class="${balhCurr}">${formatBal(curr.balHour)}</td></tr>
+                        <tr><td>🌟 XP Gained</td><td class="${xpgLast}">${formatNumber(last.xpGained)}</td><td class="${xpgCurr}">${formatNumber(curr.xpGained)}</td></tr>
                         <tr><td>✨ XP/h</td><td class="${xpLast}">${formatNumber(last.xpHour)}</td><td class="${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
                         <tr><td>⚔️ Kills/h</td><td class="${killsLast}">${formatNumber(last.killsHour)}</td><td class="${killsCurr}">${formatNumber(curr.killsHour)}</td></tr>
                         <tr><td>⏱️ Tempo</td><td>${last.timeText}</td><td>${curr.timeText}</td></tr>
@@ -1392,18 +1394,12 @@
         };
         const defeated = getCardVal(0);
         const timeText = haWindow.querySelectorAll('.ha-card b')[1]?.textContent || '0s';
+        const xpGained = getCardVal(2);
         
         const balanceNode = haWindow.querySelector('.ha-balance b');
         let balance = 0;
         if (balanceNode) {
             balance = parseInt(balanceNode.textContent.replace(/−/g, '-').replace(/[.]/g, '').replace(/[^0-9-]/g, ''), 10) || 0;
-        }
-
-        let locName = '';
-        const tloc = document.querySelector('.phud-tloc');
-        if (tloc) {
-            const parts = tloc.textContent.split('·');
-            if (parts.length > 1) locName = parts[1].trim();
         }
 
         const catchCard = haWindow.querySelector('.ha-catch b');
@@ -1416,13 +1412,24 @@
             if (match) currentBalls = parseInt(match[1], 10);
         }
 
-        if (currentHuntSnapshot && defeated < currentHuntSnapshot.defeated) {
+        const isReset = currentHuntSnapshot && defeated < currentHuntSnapshot.defeated;
+        
+        if (isReset) {
             lastHuntSnapshot = { ...currentHuntSnapshot };
             capturesCount = 0;
             lastCatchTimestamp = null;
             ballsAtLastCatch = 0;
             lastHuntStartTime = currentHuntStartTime;
             currentHuntStartTime = Date.now();
+        }
+
+        let locName = currentHuntSnapshot ? currentHuntSnapshot.locName : '';
+        if (!locName || isReset) {
+            const tloc = document.querySelector('.phud-tloc');
+            if (tloc) {
+                const parts = tloc.textContent.split('·');
+                if (parts.length > 1) locName = parts[1].trim();
+            }
         }
 
         if (currentCatch > capturesCount) {
@@ -1465,7 +1472,7 @@
             }
         }
 
-        const snapshot = { defeated, timeText, balance, balHour, xpHour, killsHour, locName };
+        const snapshot = { defeated, timeText, balance, balHour, xpHour, killsHour, xpGained, locName };
         currentHuntSnapshot = snapshot;
 
         const oldToggle = haWindow.querySelector('.ha-title .ha-btn-toggle-view');
