@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.0.3
+// @version      9.0.4
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -228,6 +228,7 @@
     function extractHuntDetailsFromJSON(name, marker) {
         const cleanName = getCleanHuntName(name);
         let priceVal = 0;
+        let experience = 0;
         let dropsHTML = '';
 
         if (globalCreatureApiData.has(cleanName)) {
@@ -242,6 +243,12 @@
                         break;
                     }
                 }
+            }
+
+            if (pokeObj.experience !== undefined) {
+                experience = parseInt(pokeObj.experience, 10) || 0;
+            } else if (pokeObj.exp !== undefined) {
+                experience = parseInt(pokeObj.exp, 10) || 0;
             }
 
             const rawDrops = pokeObj.drops || pokeObj.drop || pokeObj.loot || pokeObj.items;
@@ -270,7 +277,8 @@
         }
 
         const sellsFor = priceVal > 0 ? `$ ${priceVal.toLocaleString('en-US')}` : 'Indisponível';
-        return { sellsFor, numericPrice: priceVal, dropsHTML };
+        const expText = experience > 0 ? `${experience.toLocaleString('en-US')} XP` : '';
+        return { sellsFor, numericPrice: priceVal, dropsHTML, experience, expText };
     }
 
     // --- ESTILOS VISUAIS (ESTÉTICA BOTÂNICA E LIMPA) ---
@@ -492,54 +500,52 @@
             const dropMode = getDropMode();
 
             modsContent.innerHTML = `
-                <div class="cfg-row">
-                    <div class="cfg-label">
-                        <b>Nav Dock Button Action</b>
-                        <span>Ação do botão de teleport rápido na barra do jogo</span>
+                <div style="padding: 10px; display: flex; flex-direction: column; gap: 12px; background: #0c161f; border-radius: 8px;">
+                    <div style="font-size: 16px; font-weight: bold; color: #63b3ed; border-bottom: 1px solid #1a2d3a; padding-bottom: 8px; margin-bottom: 4px;">Configurações do Mod</div>
+                    
+                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
+                        <div class="cfg-label" style="margin-bottom: 6px;">
+                            <b style="color: #e2e8f0; font-size: 14px;">Simplified Map Mode</b>
+                            <span style="color: #a0aec0; font-size: 11px;">Ativa a lista limpa ou restaura o mapa gráfico nativo</span>
+                        </div>
+                        <div class="cfg-seg" style="display: flex; gap: 4px;">
+                            <button class="cfg-seg-btn ${mapActive ? 'on' : ''} btn-map-on" type="button" style="flex:1;">Ligado</button>
+                            <button class="cfg-seg-btn ${!mapActive ? 'on' : ''} btn-map-off" type="button" style="flex:1;">Desligado</button>
+                        </div>
                     </div>
-                    <div class="cfg-seg">
-                        <button class="cfg-seg-btn ${navMode === 'fav' ? 'on' : ''} btn-nav-fav" type="button">★ Favorita</button>
-                        <button class="cfg-seg-btn ${navMode === 'last' ? 'on' : ''} btn-nav-last" type="button">↺ Última Hunt</button>
+
+                    <div class="cfg-row ${!mapActive ? 'mod-disabled' : ''}" id="sub-map-feature-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
+                        <div class="cfg-label" style="margin-bottom: 6px;">
+                            <b style="color: #e2e8f0; font-size: 14px;">Drops Preview Mode</b>
+                            <span style="color: #a0aec0; font-size: 11px;">Como ver itens na lista do mapa</span>
+                        </div>
+                        <div class="cfg-seg" style="display: flex; gap: 4px;">
+                            <button class="cfg-seg-btn ${dropMode === 'hover' ? 'on' : ''} btn-drop-hover" type="button" style="flex:1;">Hover</button>
+                            <button class="cfg-seg-btn ${dropMode === 'icon' ? 'on' : ''} btn-drop-icon" type="button" style="flex:1;">Ícone (?)</button>
+                            <button class="cfg-seg-btn ${dropMode === 'off' ? 'on' : ''} btn-drop-off" type="button" style="flex:1;">Oculto</button>
+                        </div>
                     </div>
-                </div>
-                <div class="cfg-row">
-                    <div class="cfg-label">
-                        <b>Drops Preview Mode</b>
-                        <span>Modo 1: Hover no card | Modo 2: Ícone (?) | Modo 3: Oculto</span>
+
+                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
+                        <div class="cfg-label" style="margin-bottom: 6px;">
+                            <b style="color: #e2e8f0; font-size: 14px;">Nav Dock Button Action</b>
+                            <span style="color: #a0aec0; font-size: 11px;">Ação do botão de teleport na barra do jogo</span>
+                        </div>
+                        <div class="cfg-seg" style="display: flex; gap: 4px;">
+                            <button class="cfg-seg-btn ${navMode === 'fav' ? 'on' : ''} btn-nav-fav" type="button" style="flex:1;">★ Favorita</button>
+                            <button class="cfg-seg-btn ${navMode === 'last' ? 'on' : ''} btn-nav-last" type="button" style="flex:1;">↺ Última</button>
+                        </div>
                     </div>
-                    <div class="cfg-seg">
-                        <button class="cfg-seg-btn ${dropMode === 'hover' ? 'on' : ''} btn-drop-hover" type="button">Hover</button>
-                        <button class="cfg-seg-btn ${dropMode === 'icon' ? 'on' : ''} btn-drop-icon" type="button">Ícone (?)</button>
-                        <button class="cfg-seg-btn ${dropMode === 'off' ? 'on' : ''} btn-drop-off" type="button">Off</button>
-                    </div>
-                </div>
-                <div class="cfg-row">
-                    <div class="cfg-label">
-                        <b>Simplified Map Mode (Master Switch)</b>
-                        <span>Ativa a lista limpa ou restaura a exibição gráfica nativa do mapa</span>
-                    </div>
-                    <div class="cfg-seg">
-                        <button class="cfg-seg-btn ${mapActive ? 'on' : ''} btn-map-on" type="button">On</button>
-                        <button class="cfg-seg-btn ${!mapActive ? 'on' : ''} btn-map-off" type="button">Off</button>
-                    </div>
-                </div>
-                <div class="cfg-row ${!mapActive ? 'mod-disabled' : ''}" id="sub-map-feature-row">
-                    <div class="cfg-label">
-                        <b>Filtros e Vantagem de Tipos (Outland)</b>
-                        <span>Cálculos avançados integrados ao mapa simplificado</span>
-                    </div>
-                    <div class="cfg-seg">
-                        <span style="font-size:12px; color:#48bb78; font-weight:bold;">Ativo c/ Mapa On</span>
-                    </div>
-                </div>
-                <div class="cfg-row">
-                    <div class="cfg-label">
-                        <b>Chat Interface</b>
-                        <span>Exibe ou oculta completamente a janela de chat</span>
-                    </div>
-                    <div class="cfg-seg">
-                        <button class="cfg-seg-btn ${chatActiveState ? 'on' : ''} btn-chat-on" type="button">On</button>
-                        <button class="cfg-seg-btn ${!chatActiveState ? 'on' : ''} btn-chat-off" type="button">Off</button>
+
+                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
+                        <div class="cfg-label" style="margin-bottom: 6px;">
+                            <b style="color: #e2e8f0; font-size: 14px;">Chat Interface</b>
+                            <span style="color: #a0aec0; font-size: 11px;">Exibe ou oculta a janela de chat</span>
+                        </div>
+                        <div class="cfg-seg" style="display: flex; gap: 4px;">
+                            <button class="cfg-seg-btn ${chatActiveState ? 'on' : ''} btn-chat-on" type="button" style="flex:1;">Exibir</button>
+                            <button class="cfg-seg-btn ${!chatActiveState ? 'on' : ''} btn-chat-off" type="button" style="flex:1;">Ocultar</button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -598,21 +604,56 @@
                 customFilterBar = document.createElement('div');
                 customFilterBar.id = 'custom-hunts-filter-bar';
                 customFilterBar.style = `
-                    display: flex; gap: 8px; margin-top: 8px; margin-bottom: 4px; font-size: 12px;
+                    display: flex; flex-direction: column; gap: 6px; margin-top: 8px; margin-bottom: 4px; font-size: 12px;
                 `;
+                
+                const ALL_TYPES = ['normal','fire','water','electric','grass','ice','fighting','poison','ground','flying','psychic','bug','rock','ghost','dragon','dark','steel'];
+                const badgesHTML = ALL_TYPES.map(t => `<button class="type-badge" data-type="${t}" style="background:#1c3040; border:1px solid #2b4c66; color:#a0aec0; border-radius:4px; padding:2px 6px; cursor:pointer; font-size:11px; text-transform:capitalize;">${t}</button>`).join('');
+
                 customFilterBar.innerHTML = `
-                    <select id="sort-hunts-select" style="background:#14222d; color:#e2e8f0; border:1px solid #273f52; padding:4px 8px; border-radius:4px; outline:none; flex-grow:1;">
-                        <option value="fav">Ordenar: Favoritos Primeiro</option>
-                        <option value="price_desc">Preço: Maior -> Menor</option>
-                        <option value="price_asc">Preço: Menor -> Maior</option>
-                        <option value="eff_desc">Efetividade: Maior Vantagem (Outland)</option>
-                    </select>
+                    <div style="display: flex; gap: 8px; width: 100%;">
+                        <select id="sort-hunts-select" style="background:#14222d; color:#e2e8f0; border:1px solid #273f52; padding:4px 8px; border-radius:4px; outline:none; flex-grow:1;">
+                            <option value="fav">Ordenar: Favoritos Primeiro</option>
+                            <option value="price_desc">Preço: Maior -> Menor</option>
+                            <option value="price_asc">Preço: Menor -> Maior</option>
+                            <option value="eff_desc">Efetividade: Maior Vantagem (Outland)</option>
+                        </select>
+                        <select id="level-hunts-select" style="background:#14222d; color:#e2e8f0; border:1px solid #273f52; padding:4px 8px; border-radius:4px; outline:none; min-width:110px;">
+                            <option value="all">Todos os Níveis</option>
+                        </select>
+                        <button id="toggle-type-filter" style="background:#1a365d; color:#63b3ed; border:1px solid #2a4365; padding:4px 8px; border-radius:4px; cursor:pointer;">Tipos</button>
+                    </div>
+                    <div id="type-filter-panel" style="display:none; flex-wrap:wrap; gap:4px; margin-top:2px;">
+                        ${badgesHTML}
+                    </div>
                 `;
                 mapBody.appendChild(customFilterBar);
 
-                document.getElementById('sort-hunts-select').addEventListener('change', () => {
-                    isRendering = false;
-                    buildSimpleList();
+                document.getElementById('sort-hunts-select').addEventListener('change', () => { isRendering = false; buildSimpleList(); });
+                document.getElementById('level-hunts-select').addEventListener('change', () => { isRendering = false; buildSimpleList(); });
+                
+                document.getElementById('toggle-type-filter').addEventListener('click', () => {
+                    const panel = document.getElementById('type-filter-panel');
+                    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+                });
+
+                document.querySelectorAll('.type-badge').forEach(badge => {
+                    badge.addEventListener('click', (e) => {
+                        const btn = e.target;
+                        if (btn.classList.contains('selected')) {
+                            btn.classList.remove('selected');
+                            btn.style.background = '#1c3040';
+                            btn.style.color = '#a0aec0';
+                            btn.style.borderColor = '#2b4c66';
+                        } else {
+                            btn.classList.add('selected');
+                            btn.style.background = '#2c5282';
+                            btn.style.color = '#ebf8ff';
+                            btn.style.borderColor = '#4299e1';
+                        }
+                        isRendering = false;
+                        buildSimpleList();
+                    });
                 });
             }
 
@@ -640,6 +681,7 @@
             const activePkmnTypes = POKEMON_TYPES[activePkmn] || ["normal"];
 
             let huntDataList = [];
+            let uniqueLevels = new Set();
 
             markers.forEach(marker => {
                 const styleAttr = marker.getAttribute('style') || '';
@@ -651,6 +693,7 @@
 
                 const name = nameEl ? nameEl.textContent.trim() : 'Sem Nome';
                 const lvlText = lvlEl ? lvlEl.textContent.trim() : 'Nv 1';
+                uniqueLevels.add(lvlText);
                 const isHere = marker.classList.contains('here');
 
                 if (isHere) saveLastHunt(name);
@@ -664,15 +707,39 @@
                     sellsFor: details.sellsFor,
                     numericPrice: details.numericPrice,
                     dropsHTML: details.dropsHTML,
+                    experience: details.experience,
+                    expText: details.expText,
                     effectiveness,
+                    defenderTypes,
                     iconStyle: iconDiv ? (iconDiv.getAttribute('style') || '') : '',
                     originalElement: marker
                 });
             });
 
-            if (query) {
-                huntDataList = huntDataList.filter(hunt => hunt.name.toLowerCase().includes(query));
+            const levelSelect = document.getElementById('level-hunts-select');
+            if (levelSelect) {
+                const currentLvl = levelSelect.value;
+                const levelsArr = Array.from(uniqueLevels).sort((a,b) => parseInt(a.replace(/\D/g,'')||0) - parseInt(b.replace(/\D/g,'')||0));
+                const newHTML = `<option value="all">Todos os Níveis</option>` + levelsArr.map(lvl => `<option value="${lvl}">${lvl}</option>`).join('');
+                if (levelSelect.getAttribute('data-options') !== newHTML) {
+                    levelSelect.innerHTML = newHTML;
+                    levelSelect.setAttribute('data-options', newHTML);
+                    if (levelsArr.includes(currentLvl)) levelSelect.value = currentLvl;
+                }
             }
+
+            const selectedLvl = levelSelect ? levelSelect.value : 'all';
+            const selectedTypes = Array.from(document.querySelectorAll('.type-badge.selected')).map(el => el.dataset.type);
+
+            huntDataList = huntDataList.filter(hunt => {
+                if (query && !hunt.name.toLowerCase().includes(query)) return false;
+                if (selectedLvl !== 'all' && hunt.lvlText !== selectedLvl) return false;
+                if (selectedTypes.length > 0) {
+                    const hasType = selectedTypes.some(type => hunt.defenderTypes.includes(type));
+                    if (!hasType) return false;
+                }
+                return true;
+            });
 
             const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'fav';
             huntDataList.sort((a, b) => {
@@ -718,10 +785,14 @@
                     spriteContainer.appendChild(sprite);
                 }
 
+                const typeBadgesHTML = hunt.defenderTypes.map(t => 
+                    `<span style="font-size: 10px; background: #2d3748; color: #cbd5e0; padding: 1px 5px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">${t}</span>`
+                ).join(' ');
+
                 const infoDiv = document.createElement('div');
                 infoDiv.style = 'flex-grow: 1; margin-right: 12px;';
                 infoDiv.innerHTML = `
-                    <div style="font-weight: bold; color: ${isFav ? '#3182ce' : '#fff'}; display: flex; align-items: center; gap: 6px;">
+                    <div style="font-weight: bold; color: ${isFav ? '#3182ce' : '#fff'}; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                         ${hunt.name}
                         <span style="font-size: 11px; background: #243b4d; padding: 2px 6px; border-radius: 4px; color: #cbd5e0;">
                             ${hunt.lvlText}
@@ -729,10 +800,12 @@
                         <span style="font-size: 11px; background: #1a365d; color: #63b3ed; padding: 2px 6px; border-radius: 4px;">
                             ${hunt.effectiveness > 1 ? `⚡ ${hunt.effectiveness}x` : `${hunt.effectiveness}x`}
                         </span>
+                        ${typeBadgesHTML}
                         ${hunt.isHere ? '<span style="font-size: 11px; color: #4caf50; font-weight: bold;">[Aqui]</span>' : ''}
                     </div>
-                    <div style="font-size: 12px; color: #48bb78; margin-top: 3px; font-weight: 500;">
-                        Valor: ${hunt.sellsFor}
+                    <div style="font-size: 12px; color: #48bb78; margin-top: 3px; font-weight: 500; display: flex; gap: 10px;">
+                        <span>Valor: ${hunt.sellsFor}</span>
+                        ${hunt.expText ? `<span style="color: #ed8936;">${hunt.expText}</span>` : ''}
                     </div>
                 `;
 
@@ -807,6 +880,7 @@
         }
     }
 
+    let renderTimeout = null;
     const observer = new MutationObserver(() => {
         injectQuickTPButton();
         injectConfigTab();
@@ -814,7 +888,8 @@
 
         const mapWindow = document.querySelector('.map-window');
         if (mapWindow) {
-            setTimeout(buildSimpleList, 150);
+            if (renderTimeout) clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(buildSimpleList, 200);
         }
     });
 
