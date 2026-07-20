@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.0.2
+// @version      9.0.3
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -232,7 +232,7 @@
 
         if (globalCreatureApiData.has(cleanName)) {
             const pokeObj = globalCreatureApiData.get(cleanName);
-            const possiblePriceKeys = ['sell', 'sellsFor', 'price', 'value', 'gold', 'money', 'cost', 'reward'];
+            const possiblePriceKeys = ['sellValue', 'priceNpc', 'sell', 'sellsFor', 'price', 'value', 'gold', 'money', 'cost', 'reward'];
 
             for (const key of possiblePriceKeys) {
                 if (pokeObj[key] !== undefined && pokeObj[key] !== null && pokeObj[key] !== '') {
