@@ -873,19 +873,19 @@
         
         const backdrop = document.createElement('div');
         backdrop.className = 'sell-confirm-backdrop';
-        backdrop.innerHTML = \`
+        backdrop.innerHTML = `
             <div class="sell-confirm-modal">
                 <h3>Confirmar Venda</h3>
                 <p>Tem certeza que deseja vender os seguintes itens de alto valor?</p>
                 <div style="margin-bottom:16px; font-weight:bold; color:#ffcc00; max-height:80px; overflow-y:auto; text-align:left;">
-                    \${itemNames.map(n => '• ' + n).join('<br>')}
+                    ${itemNames.map(n => '• ' + n).join('<br>')}
                 </div>
                 <div>
                     <button class="sell-confirm-btn no" type="button">Cancelar</button>
                     <button class="sell-confirm-btn yes" type="button">Confirmar</button>
                 </div>
             </div>
-        \`;
+        `;
         document.body.appendChild(backdrop);
         
         backdrop.querySelector('.yes').addEventListener('click', () => {
