@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.0
+// @version      9.0.1
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/JulianoCLI/PIW-QOL/main/piw-qol.user.js
+// @downloadURL  https://raw.githubusercontent.com/JulianoCLI/PIW-QOL/main/piw-qol.user.js
 // ==/UserScript==
 
 (function() {
