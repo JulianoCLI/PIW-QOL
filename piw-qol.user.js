@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.2.0
+// @version      9.3.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -355,6 +355,41 @@
         .dex-ft-label { display: flex; align-items: center; gap: 4px; color: #a0aec0; font-size: 12px; cursor: pointer; margin-left: auto; }
         .dex-ft-label input { cursor: pointer; }
         .dex-cell.dex-hidden { display: none !important; }
+
+        /* Hunt Analyzer Compact Mode */
+        .ha-window.ha-compact .ha-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 4px !important; }
+        .ha-window.ha-compact .ha-card { padding: 4px 8px !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 8px !important; }
+        .ha-window.ha-compact .ha-card small { display: none !important; }
+        .ha-window.ha-compact .ha-card-ico { font-size: 16px !important; margin: 0 !important; }
+        .ha-window.ha-compact .ha-card b { font-size: 14px !important; }
+        .ha-window.ha-compact .ha-balance { font-size: 14px !important; padding: 4px !important; flex-direction: row !important; justify-content: space-between !important; }
+        .ha-window.ha-compact .ha-balance span { display: none !important; }
+        .ha-window.ha-compact .ha-balance::before { content: 'Balance'; font-weight: bold; }
+        .ha-window.ha-compact .ha-rates { gap: 6px !important; padding: 4px !important; font-size: 11px !important; }
+        .ha-window.ha-compact .ha-drops-head, .ha-window.ha-compact .ha-note { display: none !important; }
+        .ha-window.ha-compact .ha-drops { display: none !important; }
+        .ha-window.ha-compact .ha-drops.show-drops { display: flex !important; max-height: 80px !important; overflow-y: auto !important; padding: 4px !important; }
+        
+        /* Hunt Analyzer Custom UI */
+        .ha-script-actions { display: flex; justify-content: center; gap: 8px; margin-top: 6px; }
+        .ha-sbtn { background: #1a2d3a; color: #a0aec0; border: 1px solid #2b4c66; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; transition: 0.2s; flex: 1; text-align: center; }
+        .ha-sbtn:hover { background: #3182ce; color: #fff; }
+        .ha-btn-toggle-view { background: transparent; border: none; color: #a0aec0; cursor: pointer; font-size: 14px; margin-right: 8px; padding: 0; }
+        .ha-btn-toggle-view:hover { color: #fff; }
+
+        /* Compare Modal */
+        .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .ha-compare-modal { background: #14222d; border: 1px solid #273f52; border-radius: 8px; padding: 16px; color: #e2e8f0; width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .ha-compare-modal h3 { margin: 0 0 12px 0; color: #63b3ed; text-align: center; font-size: 18px; border-bottom: 1px solid #273f52; padding-bottom: 8px; }
+        .ha-compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .ha-compare-table th { text-align: left; padding: 6px; color: #a0aec0; border-bottom: 1px solid #273f52; font-weight: normal; }
+        .ha-compare-table th.center { text-align: center; }
+        .ha-compare-table td { padding: 6px; border-bottom: 1px solid #1a2d3a; text-align: right; }
+        .ha-compare-table td:first-child { text-align: left; font-weight: bold; color: #e2e8f0; }
+        .ha-compare-winner { color: #48bb78; font-weight: bold; }
+        .ha-compare-loser { color: #f56565; }
+        .ha-compare-close { width: 100%; background: #2b4c66; color: #fff; border: none; border-radius: 4px; padding: 8px; margin-top: 12px; cursor: pointer; font-weight: bold; }
+        .ha-compare-close:hover { background: #3182ce; }
     `;
     document.head.appendChild(style);
 
@@ -1254,12 +1289,135 @@
         }, true);
     }
 
+    let lastHuntSnapshot = null;
+    let currentHuntSnapshot = null;
+
+    function formatNumber(num) {
+        return new Intl.NumberFormat('pt-BR').format(num);
+    }
+
+    function showCompareModal() {
+        if (!lastHuntSnapshot) {
+            alert('Não há dados da Hunt anterior para comparar. Mude de hunt ou zere o analyzer para gerar o histórico.');
+            return;
+        }
+        const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0 };
+        const last = lastHuntSnapshot;
+
+        const cmp = (a, b) => {
+            if (a > b) return ['ha-compare-winner', 'ha-compare-loser'];
+            if (b > a) return ['ha-compare-loser', 'ha-compare-winner'];
+            return ['', ''];
+        };
+
+        const [balLast, balCurr] = cmp(last.balHour, curr.balHour);
+        const [xpLast, xpCurr] = cmp(last.xpHour, curr.xpHour);
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'ha-compare-backdrop';
+        backdrop.innerHTML = `
+            <div class="ha-compare-modal">
+                <h3>⚖️ Comparação de Hunts</h3>
+                <table class="ha-compare-table">
+                    <tr><th>Métrica</th><th class="center">Última Hunt</th><th class="center">Hunt Atual</th></tr>
+                    <tr><td>Balance/h</td><td class="center ${balLast}">$${formatNumber(last.balHour)}</td><td class="center ${balCurr}">$${formatNumber(curr.balHour)}</td></tr>
+                    <tr><td>XP/h</td><td class="center ${xpLast}">${formatNumber(last.xpHour)}</td><td class="center ${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
+                    <tr><td>Tempo</td><td class="center">${last.timeText}</td><td class="center">${curr.timeText}</td></tr>
+                    <tr><td>Defeated</td><td class="center">${last.defeated}</td><td class="center">${curr.defeated}</td></tr>
+                </table>
+                <button class="ha-compare-close" type="button">Fechar</button>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
+        backdrop.querySelector('.ha-compare-close').addEventListener('click', () => backdrop.remove());
+    }
+
+    function trackHuntAnalyzer() {
+        const haWindow = document.querySelector('.ha-window');
+        if (!haWindow) return;
+
+        const getCardVal = (idx) => {
+            const card = haWindow.querySelectorAll('.ha-card b')[idx];
+            return card ? parseInt(card.textContent.replace(/\\D/g, ''), 10) || 0 : 0;
+        };
+        const defeated = getCardVal(0);
+        const timeText = haWindow.querySelectorAll('.ha-card b')[1]?.textContent || '0s';
+        
+        const balanceNode = haWindow.querySelector('.ha-balance b');
+        let balance = 0;
+        if (balanceNode) {
+            const text = balanceNode.textContent.replace(/\\./g, '');
+            balance = parseInt(text.replace(/[^\\d-]/g, ''), 10) || 0;
+        }
+
+        const ratesNode = haWindow.querySelector('.ha-rates');
+        let balHour = 0, xpHour = 0;
+        if (ratesNode) {
+            const spans = ratesNode.querySelectorAll('span');
+            if (spans[0]) balHour = parseInt(spans[0].textContent.replace(/\\./g, '').replace(/[^\\d-]/g, ''), 10) || 0;
+            if (spans[1]) xpHour = parseInt(spans[1].textContent.replace(/\\./g, '').replace(/\\D/g, ''), 10) || 0;
+        }
+
+        const snapshot = { defeated, timeText, balance, balHour, xpHour };
+
+        if (currentHuntSnapshot && currentHuntSnapshot.defeated > 0 && defeated === 0) {
+            lastHuntSnapshot = { ...currentHuntSnapshot };
+        }
+        currentHuntSnapshot = snapshot;
+
+        const title = haWindow.querySelector('.ha-title');
+        if (title && !title.querySelector('.ha-btn-toggle-view')) {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'ha-btn-toggle-view';
+            toggleBtn.innerHTML = '◱';
+            toggleBtn.title = 'Alternar Modo Compacto';
+            toggleBtn.type = 'button';
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                haWindow.classList.toggle('ha-compact');
+            });
+            title.insertBefore(toggleBtn, title.querySelector('.ha-clear'));
+        }
+
+        let actionArea = haWindow.querySelector('.ha-script-actions');
+        if (!actionArea) {
+            actionArea = document.createElement('div');
+            actionArea.className = 'ha-script-actions';
+            
+            const dropBtn = document.createElement('button');
+            dropBtn.className = 'ha-sbtn btn-show-drops';
+            dropBtn.innerHTML = '📦 Ver Drops';
+            dropBtn.type = 'button';
+            dropBtn.addEventListener('click', () => {
+                const drops = haWindow.querySelector('.ha-drops');
+                if (drops) drops.classList.toggle('show-drops');
+            });
+
+            const compareBtn = document.createElement('button');
+            compareBtn.className = 'ha-sbtn btn-compare';
+            compareBtn.innerHTML = '⚖️ Comparar';
+            compareBtn.type = 'button';
+            compareBtn.addEventListener('click', showCompareModal);
+
+            actionArea.appendChild(dropBtn);
+            actionArea.appendChild(compareBtn);
+            
+            const clogBtn = haWindow.querySelector('.ha-clog-btn');
+            if (clogBtn) {
+                clogBtn.before(actionArea);
+            } else {
+                haWindow.appendChild(actionArea);
+            }
+        }
+    }
+
     const observer = new MutationObserver(() => {
         injectQuickTPButton();
         injectConfigTab();
         applyChatState();
         injectShopEnhancements();
         injectDexEnhancements();
+        trackHuntAnalyzer();
 
         const mapWindow = document.querySelector('.map-window');
         if (mapWindow) {
