@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.5
+// @version      9.4.6
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -381,18 +381,14 @@
         .ha-catch-stats.hidden { display: none !important; }
 
         /* Compare Modal */
-        .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
-        .ha-compare-modal { background: #0c161f; border: 1px solid #273f52; border-radius: 8px; padding: 16px; color: #e2e8f0; width: 340px; box-shadow: 0 8px 24px rgba(0,0,0,0.7); }
-        .ha-compare-modal h3 { margin: 0 0 12px 0; color: #63b3ed; text-align: center; font-size: 18px; border-bottom: 1px solid #273f52; padding-bottom: 8px; }
+        .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10000; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        .ha-compare-modal { pointer-events: auto; width: 340px; box-shadow: 0 12px 32px rgba(0,0,0,0.8); }
         .ha-compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .ha-compare-table th { text-align: left; padding: 6px; color: #a0aec0; border-bottom: 1px solid #273f52; font-weight: normal; }
-        .ha-compare-table th.center { text-align: center; }
-        .ha-compare-table td { padding: 6px; border-bottom: 1px solid #1a2d3a; text-align: right; }
-        .ha-compare-table td:first-child { text-align: left; font-weight: bold; color: #e2e8f0; }
-        .ha-compare-winner { color: #48bb78; font-weight: bold; }
-        .ha-compare-loser { color: #f56565; }
-        .ha-compare-close { width: 100%; background: #2b4c66; color: #fff; border: none; border-radius: 4px; padding: 8px; margin-top: 16px; cursor: pointer; font-weight: bold; }
-        .ha-compare-close:hover { background: #3182ce; }
+        .ha-compare-table th { text-align: center; padding: 8px; color: #a0aec0; border-bottom: 1px solid #273f52; font-weight: normal; }
+        .ha-compare-table td { padding: 8px; border-bottom: 1px solid #1a2d3a; text-align: center; font-weight: bold; }
+        .ha-compare-table td:first-child { text-align: left; font-weight: normal; color: #a0aec0; }
+        .ha-compare-winner { color: #48bb78 !important; }
+        .ha-compare-loser { color: #f56565 !important; }
     `;
     document.head.appendChild(style);
 
@@ -1332,19 +1328,25 @@
         const [balLast, balCurr] = cmp(last.balance, curr.balance);
         const [xpLast, xpCurr] = cmp(last.xpHour, curr.xpHour);
 
+        const formatBal = (val) => val < 0 ? `-$${formatNumber(Math.abs(val))}` : `$${formatNumber(val)}`;
+
         const backdrop = document.createElement('div');
         backdrop.className = 'ha-compare-backdrop';
         backdrop.innerHTML = `
-            <div class="ha-compare-modal">
-                <h3>⚖️ Comparação de Hunts</h3>
-                <table class="ha-compare-table">
-                    <tr><th>Métrica</th><th class="center">${lastTitle}</th><th class="center">${currTitle}</th></tr>
-                    <tr><td>Balance Total</td><td class="center ${balLast}">$${formatNumber(last.balance)}</td><td class="center ${balCurr}">$${formatNumber(curr.balance)}</td></tr>
-                    <tr><td>XP/h</td><td class="center ${xpLast}">${formatNumber(last.xpHour)}</td><td class="center ${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
-                    <tr><td>Tempo</td><td class="center">${last.timeText}</td><td class="center">${curr.timeText}</td></tr>
-                    <tr><td>Defeated</td><td class="center">${last.defeated}</td><td class="center">${curr.defeated}</td></tr>
-                </table>
-                <button class="ha-compare-close" type="button">Fechar</button>
+            <div class="ha-window ha-compare-modal">
+                <div class="ha-title">
+                    <span>⚖️ Comparação de Hunts</span>
+                    <button class="ha-x ha-compare-close" aria-label="Close" type="button">×</button>
+                </div>
+                <div style="padding: 12px;">
+                    <table class="ha-compare-table">
+                        <tr><th>Métrica</th><th>${lastTitle}</th><th>${currTitle}</th></tr>
+                        <tr><td>Balance Total</td><td class="${balLast}">${formatBal(last.balance)}</td><td class="${balCurr}">${formatBal(curr.balance)}</td></tr>
+                        <tr><td>XP/h</td><td class="${xpLast}">${formatNumber(last.xpHour)}</td><td class="${xpCurr}">${formatNumber(curr.xpHour)}</td></tr>
+                        <tr><td>Tempo</td><td>${last.timeText}</td><td>${curr.timeText}</td></tr>
+                        <tr><td>Defeated</td><td>${last.defeated}</td><td>${curr.defeated}</td></tr>
+                    </table>
+                </div>
             </div>
         `;
         document.body.appendChild(backdrop);
