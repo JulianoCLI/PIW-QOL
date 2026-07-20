@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.7.1
+// @version      9.7.2
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1216,6 +1216,35 @@
                     row.appendChild(lockBtn);
                 }
             });
+            
+            // Hijack Select All to respect our custom locks
+            const sellSelectAll = mkWindow.querySelector('button.mk-selall');
+            if (sellSelectAll && !sellSelectAll.dataset.sellLockIntercepted) {
+                sellSelectAll.addEventListener('click', (e) => {
+                    if (!isGuardSellLockActive()) return;
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+
+                    const allRows = Array.from(mkWindow.querySelectorAll('.mk-srow-head'));
+                    const unlockedRows = allRows.filter(r => !r.classList.contains('locked'));
+                    
+                    const anyUnchecked = unlockedRows.some(r => {
+                        const cb = r.querySelector('input.mk-check');
+                        return cb && !cb.checked;
+                    });
+
+                    unlockedRows.forEach(r => {
+                        const cb = r.querySelector('input.mk-check');
+                        if (cb) {
+                            if (anyUnchecked && !cb.checked) cb.click();
+                            else if (!anyUnchecked && cb.checked) cb.click();
+                        }
+                    });
+                    
+                    sellSelectAll.textContent = anyUnchecked ? '☑ Deselect all' : '☐ Select all';
+                }, true); // Important: capture phase!
+                sellSelectAll.dataset.sellLockIntercepted = 'true';
+            }
             
             // Intercept Sell CTA via event delegation on the sellbar
             const sellBar = mkWindow.querySelector('.mk-sellbar');
