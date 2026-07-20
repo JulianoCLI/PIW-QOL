@@ -607,12 +607,13 @@
                     display: flex; gap: 8px; margin-top: 8px; margin-bottom: 4px; font-size: 13px;
                 `;
                 
-                customFilterBar.innerHTML = `
+                                customFilterBar.innerHTML = `
                     <select id="sort-hunts-select" style="background:#0c161f; color:#cbd5e0; border:1px solid #1a2d3a; padding:6px 10px; border-radius:6px; outline:none; flex-grow:1; box-shadow: inset 0 1px 2px rgba(0,0,0,0.3); font-family: inherit; cursor: pointer;">
                         <option value="fav">Ordenar: Favoritos Primeiro</option>
                         <option value="price_desc">Preço: Maior -> Menor</option>
                         <option value="price_asc">Preço: Menor -> Maior</option>
                         <option value="eff_desc">Efetividade: Maior Vantagem (Outland)</option>
+                        <option value="xp_eff_desc">XP × Efetividade: Maior</option>
                     </select>
                 `;
                 mapBody.appendChild(customFilterBar);
@@ -662,6 +663,7 @@
                 const details = extractHuntDetailsFromJSON(name, marker);
                 const defenderTypes = getDefenderTypes(name);
                 const effectiveness = getOffensiveMultiplier(activePkmnTypes, defenderTypes);
+                const xpEfficiency = (details.experience && effectiveness) ? details.experience / effectiveness : Infinity;
 
                 huntDataList.push({
                     name, lvlText, isHere,
@@ -673,7 +675,8 @@
                     effectiveness,
                     defenderTypes,
                     iconStyle: iconDiv ? (iconDiv.getAttribute('style') || '') : '',
-                    originalElement: marker
+                    originalElement: marker,
+                    xpEfficiency
                 });
             });
 
@@ -686,6 +689,7 @@
                 if (sortVal === 'price_desc') return b.numericPrice - a.numericPrice;
                 if (sortVal === 'price_asc') return a.numericPrice - b.numericPrice;
                 if (sortVal === 'eff_desc') return b.effectiveness - a.effectiveness;
+                if (sortVal === 'xp_eff_desc') return a.xpEfficiency - b.xpEfficiency;
 
                 const aFav = favorites.includes(a.name);
                 const bFav = favorites.includes(b.name);
