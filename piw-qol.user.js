@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.0
+// @version      9.4.1
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1393,10 +1393,11 @@
         if (oldToggle) oldToggle.remove();
 
         let catchStats = haWindow.querySelector('.ha-catch-stats');
+        let isNewStats = false;
         if (!catchStats) {
             catchStats = document.createElement('div');
             catchStats.className = 'ha-catch-stats';
-            haWindow.appendChild(catchStats);
+            isNewStats = true;
         }
         
         if (lastCatchTimestamp) {
@@ -1412,9 +1413,11 @@
         }
 
         let actionArea = haWindow.querySelector('.ha-script-actions');
+        let isNewActionArea = false;
         if (!actionArea) {
             actionArea = document.createElement('div');
             actionArea.className = 'ha-script-actions';
+            isNewActionArea = true;
             
             const toggleBtn = document.createElement('button');
             toggleBtn.className = 'ha-sbtn btn-toggle-view';
@@ -1443,17 +1446,17 @@
             actionArea.appendChild(toggleBtn);
             actionArea.appendChild(dropBtn);
             actionArea.appendChild(compareBtn);
-            
+        }
+
+        if (isNewStats || isNewActionArea) {
             const clogBtn = haWindow.querySelector('.ha-clog-btn');
             if (clogBtn) {
-                clogBtn.before(catchStats);
-                clogBtn.before(actionArea);
+                if (isNewStats) clogBtn.before(catchStats);
+                if (isNewActionArea) clogBtn.before(actionArea);
             } else {
-                haWindow.appendChild(catchStats);
-                haWindow.appendChild(actionArea);
+                if (isNewStats) haWindow.appendChild(catchStats);
+                if (isNewActionArea) haWindow.appendChild(actionArea);
             }
-        } else {
-            catchStats.after(actionArea);
         }
     }
 
