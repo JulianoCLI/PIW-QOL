@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.4
+// @version      9.4.5
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1375,6 +1375,31 @@
             if (parts.length > 1) locName = parts[1].trim();
         }
 
+        const catchCard = haWindow.querySelector('.ha-catch b');
+        const currentCatch = catchCard ? parseInt(catchCard.textContent.replace(/[^0-9]/g, ''), 10) || 0 : 0;
+        
+        let currentBalls = 0;
+        const supplyCard = haWindow.querySelector('.ha-supply small');
+        if (supplyCard) {
+            const match = supplyCard.textContent.match(/(\d+)\s+balls/);
+            if (match) currentBalls = parseInt(match[1], 10);
+        }
+
+        if (currentHuntSnapshot && currentHuntSnapshot.defeated > 0 && defeated === 0) {
+            lastHuntSnapshot = { ...currentHuntSnapshot };
+            capturesCount = 0;
+            lastCatchTimestamp = null;
+            ballsAtLastCatch = 0;
+            lastHuntStartTime = currentHuntStartTime;
+            currentHuntStartTime = Date.now();
+        }
+
+        if (currentCatch > capturesCount) {
+            capturesCount = currentCatch;
+            lastCatchTimestamp = Date.now();
+            ballsAtLastCatch = currentBalls;
+        }
+
         const ratesNode = haWindow.querySelector('.ha-rates');
         let balHour = 0, xpHour = 0;
         if (ratesNode) {
@@ -1400,37 +1425,16 @@
                 }
                 catchStats.classList.remove('hidden');
             } else {
-                catchStats.classList.add('hidden');
+                const newText = `🔴 Nenhum catch nesta hunt`;
+                if (catchStats.textContent !== newText) {
+                    catchStats.textContent = newText;
+                }
+                catchStats.classList.remove('hidden');
             }
         }
 
         const snapshot = { defeated, timeText, balance, balHour, xpHour, locName };
-
-        const catchCard = haWindow.querySelector('.ha-catch b');
-        const currentCatch = catchCard ? parseInt(catchCard.textContent.replace(/[^0-9]/g, ''), 10) || 0 : 0;
-        
-        let currentBalls = 0;
-        const supplyCard = haWindow.querySelector('.ha-supply small');
-        if (supplyCard) {
-            const match = supplyCard.textContent.match(/(\d+)\s+balls/);
-            if (match) currentBalls = parseInt(match[1], 10);
-        }
-
-        if (currentHuntSnapshot && currentHuntSnapshot.defeated > 0 && defeated === 0) {
-            lastHuntSnapshot = { ...currentHuntSnapshot };
-            capturesCount = 0;
-            lastCatchTimestamp = null;
-            ballsAtLastCatch = 0;
-            lastHuntStartTime = currentHuntStartTime;
-            currentHuntStartTime = Date.now();
-        }
         currentHuntSnapshot = snapshot;
-
-        if (currentCatch > capturesCount) {
-            capturesCount = currentCatch;
-            lastCatchTimestamp = Date.now();
-            ballsAtLastCatch = currentBalls;
-        }
 
         const oldToggle = haWindow.querySelector('.ha-title .ha-btn-toggle-view');
         if (oldToggle) oldToggle.remove();
