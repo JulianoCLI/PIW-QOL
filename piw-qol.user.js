@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.3.1
+// @version      9.4.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -357,7 +357,7 @@
         .dex-cell.dex-hidden { display: none !important; }
 
         /* Hunt Analyzer Compact Mode */
-        .ha-window.ha-compact { max-width: 280px !important; width: 280px !important; }
+        .ha-window.ha-compact { max-width: 290px !important; width: 290px !important; }
         .ha-window.ha-compact .ha-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 4px !important; }
         .ha-window.ha-compact .ha-card { padding: 4px 8px !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 8px !important; }
         .ha-window.ha-compact .ha-card small { display: none !important; }
@@ -366,22 +366,23 @@
         .ha-window.ha-compact .ha-balance { font-size: 14px !important; padding: 4px !important; flex-direction: row !important; justify-content: space-between !important; }
         .ha-window.ha-compact .ha-balance span { display: none !important; }
         .ha-window.ha-compact .ha-balance::before { content: 'Balance'; font-weight: bold; }
-        .ha-window.ha-compact .ha-rates { gap: 6px !important; padding: 4px !important; font-size: 11px !important; }
+        .ha-window.ha-compact .ha-rates { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 4px !important; padding: 4px !important; font-size: 11px !important; }
+        .ha-window.ha-compact .ha-rates span { width: 100% !important; text-align: center !important; margin: 0 !important; }
         .ha-window.ha-compact .ha-drops-head, .ha-window.ha-compact .ha-note { display: none !important; }
         .ha-window.ha-compact .ha-clog-btn { display: none !important; }
         .ha-window.ha-compact .ha-drops { display: none !important; }
         .ha-window.ha-compact .ha-drops.show-drops { display: flex !important; max-height: 80px !important; overflow-y: auto !important; padding: 4px !important; }
         
         /* Hunt Analyzer Custom UI */
-        .ha-script-actions { display: flex; justify-content: center; gap: 8px; margin-top: 8px; padding: 0 8px 8px 8px; }
-        .ha-sbtn { background: #1a2d3a; color: #a0aec0; border: 1px solid #273f52; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; transition: all 0.15s ease; flex: 1; text-align: center; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .ha-script-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; padding: 0 8px 8px 8px; }
+        .ha-sbtn { background: #1a2d3a; color: #a0aec0; border: 1px solid #273f52; border-radius: 6px; padding: 6px 4px; font-size: 11px; cursor: pointer; transition: all 0.15s ease; text-align: center; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 4px; }
         .ha-sbtn:hover { background: #3182ce; color: #fff; border-color: #3182ce; }
-        .ha-btn-toggle-view { background: #0c161f; border: 1px solid #273f52; color: #a0aec0; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 8px; padding: 2px 6px; font-weight: bold; transition: all 0.15s; }
-        .ha-btn-toggle-view:hover { color: #fff; border-color: #3182ce; }
+        .ha-catch-stats { font-size: 11px; color: #a0aec0; text-align: center; margin: 6px 8px; padding-top: 8px; border-top: 1px solid #1a2d3a; }
+        .ha-catch-stats b { color: #e2e8f0; font-weight: bold; }
 
         /* Compare Modal */
-        .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center; }
-        .ha-compare-modal { background: #14222d; border: 1px solid #273f52; border-radius: 8px; padding: 16px; color: #e2e8f0; width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .ha-compare-modal { background: #0c161f; border: 1px solid #273f52; border-radius: 8px; padding: 16px; color: #e2e8f0; width: 340px; box-shadow: 0 8px 24px rgba(0,0,0,0.7); }
         .ha-compare-modal h3 { margin: 0 0 12px 0; color: #63b3ed; text-align: center; font-size: 18px; border-bottom: 1px solid #273f52; padding-bottom: 8px; }
         .ha-compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .ha-compare-table th { text-align: left; padding: 6px; color: #a0aec0; border-bottom: 1px solid #273f52; font-weight: normal; }
@@ -390,7 +391,7 @@
         .ha-compare-table td:first-child { text-align: left; font-weight: bold; color: #e2e8f0; }
         .ha-compare-winner { color: #48bb78; font-weight: bold; }
         .ha-compare-loser { color: #f56565; }
-        .ha-compare-close { width: 100%; background: #2b4c66; color: #fff; border: none; border-radius: 4px; padding: 8px; margin-top: 12px; cursor: pointer; font-weight: bold; }
+        .ha-compare-close { width: 100%; background: #2b4c66; color: #fff; border: none; border-radius: 4px; padding: 8px; margin-top: 16px; cursor: pointer; font-weight: bold; }
         .ha-compare-close:hover { background: #3182ce; }
     `;
     document.head.appendChild(style);
@@ -1293,6 +1294,9 @@
 
     let lastHuntSnapshot = null;
     let currentHuntSnapshot = null;
+    let lastCatchTimestamp = null;
+    let ballsAtLastCatch = 0;
+    let capturesCount = 0;
 
     function formatNumber(num) {
         return new Intl.NumberFormat('pt-BR').format(num);
@@ -1340,7 +1344,7 @@
 
         const getCardVal = (idx) => {
             const card = haWindow.querySelectorAll('.ha-card b')[idx];
-            return card ? parseInt(card.textContent.replace(/\\D/g, ''), 10) || 0 : 0;
+            return card ? parseInt(card.textContent.replace(/[^0-9]/g, ''), 10) || 0 : 0;
         };
         const defeated = getCardVal(0);
         const timeText = haWindow.querySelectorAll('.ha-card b')[1]?.textContent || '0s';
@@ -1348,38 +1352,63 @@
         const balanceNode = haWindow.querySelector('.ha-balance b');
         let balance = 0;
         if (balanceNode) {
-            const text = balanceNode.textContent.replace(/\\./g, '');
-            balance = parseInt(text.replace(/[^\\d-]/g, ''), 10) || 0;
+            balance = parseInt(balanceNode.textContent.replace(/−/g, '-').replace(/[.]/g, '').replace(/[^0-9-]/g, ''), 10) || 0;
         }
 
         const ratesNode = haWindow.querySelector('.ha-rates');
         let balHour = 0, xpHour = 0;
         if (ratesNode) {
             const spans = ratesNode.querySelectorAll('span');
-            if (spans[0]) balHour = parseInt(spans[0].textContent.replace(/\\./g, '').replace(/[^\\d-]/g, ''), 10) || 0;
-            if (spans[1]) xpHour = parseInt(spans[1].textContent.replace(/\\./g, '').replace(/\\D/g, ''), 10) || 0;
+            if (spans[0]) balHour = parseInt(spans[0].textContent.replace(/−/g, '-').replace(/[.]/g, '').replace(/[^0-9-]/g, ''), 10) || 0;
+            if (spans[1]) xpHour = parseInt(spans[1].textContent.replace(/[.]/g, '').replace(/[^0-9]/g, ''), 10) || 0;
         }
 
         const snapshot = { defeated, timeText, balance, balHour, xpHour };
 
+        const catchCard = haWindow.querySelector('.ha-catch b');
+        const currentCatch = catchCard ? parseInt(catchCard.textContent.replace(/[^0-9]/g, ''), 10) || 0 : 0;
+        
+        let currentBalls = 0;
+        const supplyCard = haWindow.querySelector('.ha-supply small');
+        if (supplyCard) {
+            const match = supplyCard.textContent.match(/(\d+)\s+balls/);
+            if (match) currentBalls = parseInt(match[1], 10);
+        }
+
         if (currentHuntSnapshot && currentHuntSnapshot.defeated > 0 && defeated === 0) {
             lastHuntSnapshot = { ...currentHuntSnapshot };
+            capturesCount = 0;
+            lastCatchTimestamp = null;
+            ballsAtLastCatch = 0;
         }
         currentHuntSnapshot = snapshot;
 
-        const title = haWindow.querySelector('.ha-title');
-        if (title && !title.querySelector('.ha-btn-toggle-view')) {
-            const toggleBtn = document.createElement('button');
-            toggleBtn.className = 'ha-btn-toggle-view';
-            toggleBtn.innerHTML = haWindow.classList.contains('ha-compact') ? '➕ Maximizar' : '➖ Minimizar';
-            toggleBtn.title = 'Alternar layout reduzido/completo do Analyzer';
-            toggleBtn.type = 'button';
-            toggleBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const isCompact = haWindow.classList.toggle('ha-compact');
-                toggleBtn.innerHTML = isCompact ? '➕ Maximizar' : '➖ Minimizar';
-            });
-            title.insertBefore(toggleBtn, title.querySelector('.ha-clear'));
+        if (currentCatch > capturesCount) {
+            capturesCount = currentCatch;
+            lastCatchTimestamp = Date.now();
+            ballsAtLastCatch = currentBalls;
+        }
+
+        const oldToggle = haWindow.querySelector('.ha-title .ha-btn-toggle-view');
+        if (oldToggle) oldToggle.remove();
+
+        let catchStats = haWindow.querySelector('.ha-catch-stats');
+        if (!catchStats) {
+            catchStats = document.createElement('div');
+            catchStats.className = 'ha-catch-stats';
+            haWindow.appendChild(catchStats);
+        }
+        
+        if (lastCatchTimestamp) {
+            const diffMs = Date.now() - lastCatchTimestamp;
+            const diffM = Math.floor(diffMs / 60000);
+            const timeStr = diffM > 0 ? `há ${diffM}m` : 'agora';
+            const dateStr = new Date(lastCatchTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const ballsSpent = currentBalls - ballsAtLastCatch;
+            catchStats.innerHTML = `Último catch: <b>${dateStr}</b> (${timeStr}) &nbsp;•&nbsp; 🔴 <b>${ballsSpent}</b> balls usadas`;
+            catchStats.style.display = 'block';
+        } else {
+            catchStats.style.display = 'none';
         }
 
         let actionArea = haWindow.querySelector('.ha-script-actions');
@@ -1387,9 +1416,18 @@
             actionArea = document.createElement('div');
             actionArea.className = 'ha-script-actions';
             
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'ha-sbtn btn-toggle-view';
+            toggleBtn.innerHTML = haWindow.classList.contains('ha-compact') ? '⤢ Expandir' : '⤡ Reduzir';
+            toggleBtn.type = 'button';
+            toggleBtn.addEventListener('click', () => {
+                const isCompact = haWindow.classList.toggle('ha-compact');
+                toggleBtn.innerHTML = isCompact ? '⤢ Expandir' : '⤡ Reduzir';
+            });
+
             const dropBtn = document.createElement('button');
             dropBtn.className = 'ha-sbtn btn-show-drops';
-            dropBtn.innerHTML = '📦 Ver Drops';
+            dropBtn.innerHTML = '📦 Drops';
             dropBtn.type = 'button';
             dropBtn.addEventListener('click', () => {
                 const drops = haWindow.querySelector('.ha-drops');
@@ -1402,15 +1440,20 @@
             compareBtn.type = 'button';
             compareBtn.addEventListener('click', showCompareModal);
 
+            actionArea.appendChild(toggleBtn);
             actionArea.appendChild(dropBtn);
             actionArea.appendChild(compareBtn);
             
             const clogBtn = haWindow.querySelector('.ha-clog-btn');
             if (clogBtn) {
+                clogBtn.before(catchStats);
                 clogBtn.before(actionArea);
             } else {
+                haWindow.appendChild(catchStats);
                 haWindow.appendChild(actionArea);
             }
+        } else {
+            catchStats.after(actionArea);
         }
     }
 
