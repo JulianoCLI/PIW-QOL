@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.11
+// @version      9.5.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -20,6 +20,8 @@
     const STORAGE_NAV_MODE = 'script_nav_tp_mode_v1';
     const STORAGE_DROP_MODE = 'script_drop_mode_v1'; // 'hover', 'icon', 'off'
     const STORAGE_SELL_CONFIRM = 'script_sell_confirm_items_v1';
+    const STORAGE_SELL_LOCKS = 'script_sell_locks_v1';
+    const STORAGE_DEX_FAST_TRAVEL = 'script_dex_fast_travel_v1';
 
     let isRendering = false;
     const globalCreatureApiData = new Map();
@@ -341,12 +343,19 @@
         .mk-lock-sell:hover { opacity: 0.8; }
         .mk-srow-head.locked { opacity: 0.6; }
 
-        .sell-confirm-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; }
-        .sell-confirm-modal { background: #14222d; border: 1px solid #273f52; border-radius: 8px; padding: 20px; color: #e2e8f0; width: 300px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-        .sell-confirm-modal h3 { margin: 0 0 10px 0; color: #63b3ed; font-size: 18px; }
-        .sell-confirm-btn { padding: 6px 12px; margin: 0 6px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .sell-confirm-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .sell-confirm-modal { background: #0c161f; border: 1px solid #273f52; border-radius: 8px; padding: 0; color: #e2e8f0; width: 320px; box-shadow: 0 12px 32px rgba(0,0,0,0.8); overflow: hidden; }
+        .sell-confirm-title { background: #14222d; border-bottom: 1px solid #273f52; padding: 12px 16px; font-size: 15px; font-weight: bold; color: #63b3ed; display: flex; align-items: center; gap: 8px; }
+        .sell-confirm-body { padding: 16px; }
+        .sell-confirm-body p { color: #a0aec0; font-size: 13px; margin: 0 0 10px 0; }
+        .sell-confirm-items { background: #14222d; border: 1px solid #1a2d3a; border-radius: 6px; padding: 8px 12px; margin-bottom: 16px; max-height: 100px; overflow-y: auto; }
+        .sell-confirm-items div { color: #ffcc00; font-weight: bold; font-size: 13px; padding: 2px 0; }
+        .sell-confirm-footer { display: flex; gap: 8px; }
+        .sell-confirm-btn { flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: background 0.15s; }
         .sell-confirm-btn.yes { background: #48bb78; color: #fff; }
-        .sell-confirm-btn.no { background: #f56565; color: #fff; }
+        .sell-confirm-btn.yes:hover { background: #38a169; }
+        .sell-confirm-btn.no { background: #2b4c66; color: #e2e8f0; border: 1px solid #273f52; }
+        .sell-confirm-btn.no:hover { background: #3182ce; }
 
         .dex-script-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid #1a2d3a; }
         .dex-fbtn { padding: 4px 10px; border: 1px solid #273f52; background: #0c161f; color: #a0aec0; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
@@ -424,6 +433,22 @@
     function setSellConfirmItems(items) {
         localStorage.setItem(STORAGE_SELL_CONFIRM, JSON.stringify(items));
     }
+
+    function getSellLocks() {
+        const stored = localStorage.getItem(STORAGE_SELL_LOCKS);
+        return stored ? JSON.parse(stored) : [];
+    }
+    function addSellLock(itemName) {
+        const locks = getSellLocks();
+        if (!locks.includes(itemName)) { locks.push(itemName); localStorage.setItem(STORAGE_SELL_LOCKS, JSON.stringify(locks)); }
+    }
+    function removeSellLock(itemName) {
+        const locks = getSellLocks().filter(n => n !== itemName);
+        localStorage.setItem(STORAGE_SELL_LOCKS, JSON.stringify(locks));
+    }
+
+    function isDexFastTravelActive() { return localStorage.getItem(STORAGE_DEX_FAST_TRAVEL) === 'true'; }
+    function setDexFastTravel(val) { localStorage.setItem(STORAGE_DEX_FAST_TRAVEL, val ? 'true' : 'false'); }
 
     function applyMapScriptState() {
         const active = isScriptMapActive();
@@ -616,6 +641,17 @@
                         </div>
                     </div>
 
+                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
+                        <div class="cfg-label" style="margin-bottom: 6px;">
+                            <b style="color: #e2e8f0; font-size: 14px;">Pokédex Fast Travel</b>
+                            <span style="color: #a0aec0; font-size: 11px;">Exibe o toggle de Fast Travel na Pokédex</span>
+                        </div>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 0;">
+                            <input type="checkbox" class="btn-dex-ft" ${isDexFastTravelActive() ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#3182ce;">
+                            <span style="color:#a0aec0; font-size:12px;">Habilitar ⚡ Fast Travel na Pokédex</span>
+                        </label>
+                    </div>
+
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0; display:flex; gap:12px; align-items:flex-start;">
                         <div class="cfg-label" style="flex:1;">
                             <b style="color: #e2e8f0; font-size: 14px;">Sell Confirmation Items</b>
@@ -657,6 +693,10 @@
 
             modsContent.querySelector('.btn-chat-on').addEventListener('click', () => { setChatActive(true); updateModsUI(); });
             modsContent.querySelector('.btn-chat-off').addEventListener('click', () => { setChatActive(false); updateModsUI(); });
+
+            modsContent.querySelector('.btn-dex-ft').addEventListener('change', (e) => {
+                setDexFastTravel(e.target.checked);
+            });
 
             const selectedListEl = modsContent.querySelector('#cfg-sell-selected-list');
             const ddBtn = modsContent.querySelector('#cfg-sell-dd-btn');
@@ -1032,14 +1072,16 @@
         backdrop.className = 'sell-confirm-backdrop';
         backdrop.innerHTML = `
             <div class="sell-confirm-modal">
-                <h3>Confirmar Venda</h3>
-                <p>Tem certeza que deseja vender os seguintes itens de alto valor?</p>
-                <div style="margin-bottom:16px; font-weight:bold; color:#ffcc00; max-height:80px; overflow-y:auto; text-align:left;">
-                    ${itemNames.map(n => '• ' + n).join('<br>')}
-                </div>
-                <div>
-                    <button class="sell-confirm-btn no" type="button">Cancelar</button>
-                    <button class="sell-confirm-btn yes" type="button">Confirmar</button>
+                <div class="sell-confirm-title">⚠️ Confirmar Venda</div>
+                <div class="sell-confirm-body">
+                    <p>Você está prestes a vender os seguintes itens de alto valor:</p>
+                    <div class="sell-confirm-items">
+                        ${itemNames.map(n => `<div>• ${n}</div>`).join('')}
+                    </div>
+                    <div class="sell-confirm-footer">
+                        <button class="sell-confirm-btn no" type="button">❌ Cancelar</button>
+                        <button class="sell-confirm-btn yes" type="button">✅ Confirmar Venda</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -1068,34 +1110,56 @@
         // 1. Sell Tab: Locks & Intercept Sell
         const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Sell'));
         if (isSellTab) {
+            const locks = getSellLocks();
             mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
                 if (row.querySelector('.mk-lock-sell')) return;
                 const priceSpan = row.querySelector('.mk-price');
+                const nameEl = row.querySelector('.mk-name');
+                const itemName = nameEl ? nameEl.textContent.trim() : '';
                 if (priceSpan) {
                     const lockBtn = document.createElement('button');
                     lockBtn.type = 'button';
                     lockBtn.className = 'mk-lock-sell';
-                    lockBtn.innerHTML = '🔓';
-                    lockBtn.title = 'Bloquear item';
+                    const initLocked = locks.includes(itemName);
+                    lockBtn.innerHTML = initLocked ? '🔒' : '🔓';
+                    lockBtn.title = initLocked ? 'Desbloquear item' : 'Bloquear item';
+                    if (initLocked) {
+                        row.classList.add('locked');
+                        const cb = row.querySelector('input.mk-check');
+                        if (cb) { if (cb.checked) cb.click(); cb.disabled = true; }
+                    }
                     lockBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         e.preventDefault();
                         const isLocked = row.classList.toggle('locked');
                         lockBtn.innerHTML = isLocked ? '🔒' : '🔓';
                         lockBtn.title = isLocked ? 'Desbloquear item' : 'Bloquear item';
+                        if (isLocked) addSellLock(itemName); else removeSellLock(itemName);
                         const checkbox = row.querySelector('input.mk-check');
                         if (checkbox) {
-                            if (isLocked) {
-                                if (checkbox.checked) checkbox.click(); // trigger react uncheck
-                                checkbox.disabled = true;
-                            } else {
-                                checkbox.disabled = false;
-                            }
+                            if (isLocked) { if (checkbox.checked) checkbox.click(); checkbox.disabled = true; }
+                            else { checkbox.disabled = false; }
                         }
                     });
                     priceSpan.parentNode.insertBefore(lockBtn, priceSpan.nextSibling);
                 }
             });
+
+            // Guard locked items via MutationObserver on each locked checkbox
+            if (!mkWindow.dataset.lockObserverActive) {
+                const lockObserver = new MutationObserver(() => {
+                    mkWindow.querySelectorAll('.mk-srow-head.locked').forEach(row => {
+                        const cb = row.querySelector('input.mk-check');
+                        if (cb && cb.checked) { cb.click(); cb.disabled = true; }
+                    });
+                });
+                mkWindow.querySelectorAll('.mk-srow-head.locked input.mk-check').forEach(cb => {
+                    lockObserver.observe(cb, { attributes: true, attributeFilter: ['checked'] });
+                });
+                // Also watch the whole list for new checks
+                lockObserver.observe(mkWindow, { subtree: true, attributes: true, attributeFilter: ['checked', 'class'] });
+                mkWindow.dataset.lockObserverActive = 'true';
+            }
             
             // Intercept Sell CTA via event delegation on the sellbar
             const sellBar = mkWindow.querySelector('.mk-sellbar');
@@ -1154,39 +1218,46 @@
             }
         }
         
-        // 2. Pokemon Tab: Rarity select all limit
         const isPokeTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Pokémon'));
         if (isPokeTab) {
             const selectAllBtn = mkWindow.querySelector('button.mk-selall');
             if (selectAllBtn && !selectAllBtn.dataset.intercepted) {
-                const reactPropsKey = Object.keys(selectAllBtn).find(k => k.startsWith('__reactProps$'));
-                if (reactPropsKey && selectAllBtn[reactPropsKey] && selectAllBtn[reactPropsKey].onClick) {
-                    const origClick = selectAllBtn[reactPropsKey].onClick;
-                    selectAllBtn[reactPropsKey].onClick = (e) => {
-                        origClick(e);
-                        setTimeout(() => {
-                            mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
-                                const rarity = getPokemonRarity(row);
-                                const forbidden = ['lendária', 'mítica', 'divina'];
-                                if (rarity && forbidden.some(r => rarity.includes(r))) {
-                                    const cb = row.querySelector('input.mk-check');
-                                    if (cb && cb.checked) cb.click();
-                                }
-                            });
-                        }, 50);
-                    };
-                    selectAllBtn.dataset.intercepted = 'true';
-                }
+                selectAllBtn.addEventListener('click', () => {
+                    setTimeout(() => {
+                        mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
+                            const rarity = getPokemonRarity(row);
+                            const forbidden = ['lendária', 'mítica', 'divina'];
+                            if (rarity && forbidden.some(r => rarity.includes(r))) {
+                                const cb = row.querySelector('input.mk-check');
+                                if (cb && cb.checked) cb.click();
+                            }
+                        });
+                    }, 50);
+                });
+                selectAllBtn.dataset.intercepted = 'true';
             }
         }
     }
 
     function injectDexEnhancements() {
         const dexWindow = document.querySelector('.dex-window');
-        if (!dexWindow || dexWindow.querySelector('.dex-script-controls')) return;
+        if (!dexWindow) return;
+
+        // If a dex-cell-detail is open (pokemon detail page), grid won't be present
+        const grid = dexWindow.querySelector('.dex-grid');
+        if (!grid) {
+            // Remove stale controls if grid is gone (user opened a pokemon page)
+            const stale = dexWindow.querySelector('.dex-script-controls');
+            if (stale) stale.remove();
+            return;
+        }
+
+        if (dexWindow.querySelector('.dex-script-controls')) return;
 
         const dexControls = dexWindow.querySelector('.dex-controls');
         if (!dexControls) return;
+
+        const ftEnabled = isDexFastTravelActive();
 
         const bar = document.createElement('div');
         bar.className = 'dex-script-controls';
@@ -1195,12 +1266,9 @@
             <button class="dex-fbtn" data-filter="caught" type="button">✓ Caught</button>
             <button class="dex-fbtn" data-filter="notcaught" type="button">✗ Not Caught</button>
             <button class="dex-fbtn" data-filter="sort-value" type="button" style="display:none;">💰 Menor Valor</button>
-            <label class="dex-ft-label"><input type="checkbox" class="dex-ft-check"> ⚡ Fast Travel</label>
+            ${ftEnabled ? '<label class="dex-ft-label"><input type="checkbox" class="dex-ft-check"> ⚡ Fast Travel</label>' : ''}
         `;
         dexControls.after(bar);
-
-        const grid = dexWindow.querySelector('.dex-grid');
-        if (!grid) return;
 
         const filterBtns = bar.querySelectorAll('.dex-fbtn[data-filter]');
         const sortBtn = bar.querySelector('.dex-fbtn[data-filter="sort-value"]');
@@ -1293,18 +1361,19 @@
         });
 
         // Fast Travel: intercept clicks on dex-cell
-        grid.addEventListener('click', (e) => {
-            if (!ftCheck.checked) return;
-            const cell = e.target.closest('.dex-cell');
-            if (!cell) return;
-            e.stopPropagation();
-            e.preventDefault();
-
-            const pokeName = cell.querySelector('.dex-cell-name')?.textContent?.trim();
-            if (!pokeName) return;
-
-            teleportToTarget(pokeName);
-        }, true);
+        const ftCheck = bar.querySelector('.dex-ft-check');
+        if (ftCheck) {
+            grid.addEventListener('click', (e) => {
+                if (!ftCheck.checked) return;
+                const cell = e.target.closest('.dex-cell');
+                if (!cell) return;
+                e.stopPropagation();
+                e.preventDefault();
+                const pokeName = cell.querySelector('.dex-cell-name')?.textContent?.trim();
+                if (!pokeName) return;
+                teleportToTarget(pokeName);
+            }, true);
+        }
     }
 
     let lastHuntSnapshot = null;
