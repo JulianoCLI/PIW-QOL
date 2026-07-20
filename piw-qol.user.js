@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.10
+// @version      9.4.11
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1136,6 +1136,21 @@
                     }
                 }, true); // capture phase – runs before React's handler
                 sellBar.dataset.sellIntercepted = 'true';
+            }
+
+            // Intercept Select All to uncheck locked items after React marks them
+            const sellSelectAll = mkWindow.querySelector('button.mk-selall');
+            if (sellSelectAll && !sellSelectAll.dataset.sellLockIntercepted) {
+                sellSelectAll.addEventListener('click', () => {
+                    setTimeout(() => {
+                        mkWindow.querySelectorAll('.mk-srow-head.locked').forEach(row => {
+                            const cb = row.querySelector('input.mk-check');
+                            if (cb && cb.checked) cb.click();
+                            if (cb) cb.disabled = true;
+                        });
+                    }, 30);
+                });
+                sellSelectAll.dataset.sellLockIntercepted = 'true';
             }
         }
         
