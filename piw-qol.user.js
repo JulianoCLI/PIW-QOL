@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.5.1
+// @version      9.5.2
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1079,8 +1079,8 @@
                         ${itemNames.map(n => `<div>• ${n}</div>`).join('')}
                     </div>
                     <div class="sell-confirm-footer">
-                        <button class="sell-confirm-btn no" type="button">❌ Cancelar</button>
                         <button class="sell-confirm-btn yes" type="button">✅ Confirmar Venda</button>
+                        <button class="sell-confirm-btn no" type="button">❌ Cancelar</button>
                     </div>
                 </div>
             </div>
@@ -1145,20 +1145,19 @@
                 }
             });
 
-            // Guard locked items via MutationObserver on each locked checkbox
-            if (!mkWindow.dataset.lockObserverActive) {
-                const lockObserver = new MutationObserver(() => {
-                    mkWindow.querySelectorAll('.mk-srow-head.locked').forEach(row => {
-                        const cb = row.querySelector('input.mk-check');
-                        if (cb && cb.checked) { cb.click(); cb.disabled = true; }
-                    });
+            // Guard locked items via Select All interception
+            const sellSelectAll = mkWindow.querySelector('button.mk-selall');
+            if (sellSelectAll && !sellSelectAll.dataset.sellLockIntercepted) {
+                sellSelectAll.addEventListener('click', () => {
+                    setTimeout(() => {
+                        mkWindow.querySelectorAll('.mk-srow-head.locked').forEach(row => {
+                            const cb = row.querySelector('input.mk-check');
+                            if (cb && cb.checked) cb.click();
+                            if (cb) cb.disabled = true;
+                        });
+                    }, 30);
                 });
-                mkWindow.querySelectorAll('.mk-srow-head.locked input.mk-check').forEach(cb => {
-                    lockObserver.observe(cb, { attributes: true, attributeFilter: ['checked'] });
-                });
-                // Also watch the whole list for new checks
-                lockObserver.observe(mkWindow, { subtree: true, attributes: true, attributeFilter: ['checked', 'class'] });
-                mkWindow.dataset.lockObserverActive = 'true';
+                sellSelectAll.dataset.sellLockIntercepted = 'true';
             }
             
             // Intercept Sell CTA via event delegation on the sellbar
