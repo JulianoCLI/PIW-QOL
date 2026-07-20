@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.5.3
+// @version      9.6.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -719,16 +719,21 @@
                 }
             });
 
-            const uniqueItems = [];
-            const seenNames = new Set();
-            for (const item of globalItemApiData.values()) {
-                const name = item.name || item.title;
-                if (name && !seenNames.has(name)) {
-                    seenNames.add(name);
-                    uniqueItems.push(item);
+            let uniqueItems = null;
+
+            function initUniqueItems() {
+                if (uniqueItems) return;
+                uniqueItems = [];
+                const seenNames = new Set();
+                for (const item of globalItemApiData.values()) {
+                    const name = item.name || item.title;
+                    if (name && !seenNames.has(name)) {
+                        seenNames.add(name);
+                        uniqueItems.push(item);
+                    }
                 }
+                uniqueItems.sort((a, b) => (a.name || a.title).localeCompare(b.name || b.title));
             }
-            uniqueItems.sort((a, b) => (a.name || a.title).localeCompare(b.name || b.title));
 
             function renderSelected() {
                 const items = getSellConfirmItems();
@@ -762,6 +767,7 @@
             }
 
             function renderDropdown() {
+                initUniqueItems();
                 const query = searchInputEl.value.toLowerCase().trim();
                 const selectedItems = getSellConfirmItems();
                 dropdownEl.innerHTML = '';
@@ -1591,19 +1597,25 @@
         }
     }
 
+    let domCheckTimeout = null;
     const observer = new MutationObserver(() => {
-        injectQuickTPButton();
-        injectConfigTab();
-        applyChatState();
-        injectShopEnhancements();
-        injectDexEnhancements();
-        trackHuntAnalyzer();
+        if (domCheckTimeout) return;
+        domCheckTimeout = setTimeout(() => {
+            domCheckTimeout = null;
+            
+            injectQuickTPButton();
+            if (document.querySelector('.cfg-window')) injectConfigTab();
+            applyChatState();
+            if (document.querySelector('.win-window')) injectShopEnhancements();
+            if (document.querySelector('.dex-window')) injectDexEnhancements();
+            if (document.querySelector('.ha-window:not(.ha-compare-modal)')) trackHuntAnalyzer();
 
-        const mapWindow = document.querySelector('.map-window');
-        if (mapWindow) {
-            if (renderTimeout) clearTimeout(renderTimeout);
-            renderTimeout = setTimeout(buildSimpleList, 200);
-        }
+            const mapWindow = document.querySelector('.map-window');
+            if (mapWindow) {
+                if (renderTimeout) clearTimeout(renderTimeout);
+                renderTimeout = setTimeout(buildSimpleList, 200);
+            }
+        }, 150);
     });
 
     applyMapScriptState();
