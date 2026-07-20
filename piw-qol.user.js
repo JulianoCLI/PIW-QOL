@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.7.0
+// @version      9.7.1
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1167,57 +1167,55 @@
         const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Sell'));
         if (isSellTab) {
             const locks = getSellLocks();
+            const guardActive = isGuardSellLockActive();
             mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
-                if (row.querySelector('.mk-lock-sell')) return;
+                if (row.querySelector('.mk-lock')) return;
                 const priceSpan = row.querySelector('.mk-price');
                 const nameEl = row.querySelector('.mk-name');
                 const itemName = nameEl ? nameEl.textContent.trim() : '';
                 if (priceSpan) {
                     const lockBtn = document.createElement('button');
                     lockBtn.type = 'button';
-                    lockBtn.className = 'mk-lock-sell';
                     const initLocked = locks.includes(itemName);
+                    lockBtn.className = `mk-lock${initLocked ? ' on' : ''}`;
+                    lockBtn.title = initLocked ? 'Unlock — release for selling' : 'Lock — protect from selling';
+                    lockBtn.setAttribute('aria-label', initLocked ? 'Unlock Item' : 'Lock Item');
                     lockBtn.innerHTML = initLocked ? '🔒' : '🔓';
-                    lockBtn.title = initLocked ? 'Desbloquear item' : 'Bloquear item';
+                    
                     if (initLocked) {
                         row.classList.add('locked');
                         const cb = row.querySelector('input.mk-check');
-                        if (cb) { if (cb.checked) cb.click(); cb.disabled = true; }
+                        if (cb) {
+                            if (cb.checked) cb.click();
+                            if (guardActive) cb.setAttribute('disabled', '');
+                        }
                     }
+
                     lockBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         e.preventDefault();
                         const isLocked = row.classList.toggle('locked');
+                        lockBtn.className = `mk-lock${isLocked ? ' on' : ''}`;
+                        lockBtn.title = isLocked ? 'Unlock — release for selling' : 'Lock — protect from selling';
+                        lockBtn.setAttribute('aria-label', isLocked ? 'Unlock Item' : 'Lock Item');
                         lockBtn.innerHTML = isLocked ? '🔒' : '🔓';
-                        lockBtn.title = isLocked ? 'Desbloquear item' : 'Bloquear item';
+                        
                         if (isLocked) addSellLock(itemName); else removeSellLock(itemName);
-                        const checkbox = row.querySelector('input.mk-check');
-                        if (checkbox) {
-                            if (isLocked) { if (checkbox.checked) checkbox.click(); checkbox.disabled = true; }
-                            else { checkbox.disabled = false; }
+                        
+                        const cb = row.querySelector('input.mk-check');
+                        if (cb) {
+                            if (isLocked) {
+                                if (cb.checked) cb.click();
+                                if (guardActive) cb.setAttribute('disabled', '');
+                            } else {
+                                cb.removeAttribute('disabled');
+                            }
                         }
                     });
-                    priceSpan.parentNode.insertBefore(lockBtn, priceSpan.nextSibling);
+                    
+                    row.appendChild(lockBtn);
                 }
             });
-
-            // Guard locked items via Select All interception
-            const sellSelectAll = mkWindow.querySelector('button.mk-selall');
-            if (sellSelectAll && !sellSelectAll.dataset.sellLockIntercepted) {
-                sellSelectAll.addEventListener('click', () => {
-                    if (!isGuardSellLockActive()) return;
-                    let ticks = 0;
-                    const interval = setInterval(() => {
-                        mkWindow.querySelectorAll('.mk-srow-head.locked').forEach(row => {
-                            const cb = row.querySelector('input.mk-check');
-                            if (cb && cb.checked) { cb.click(); cb.disabled = true; }
-                        });
-                        ticks++;
-                        if (ticks > 5) clearInterval(interval);
-                    }, 20);
-                });
-                sellSelectAll.dataset.sellLockIntercepted = 'true';
-            }
             
             // Intercept Sell CTA via event delegation on the sellbar
             const sellBar = mkWindow.querySelector('.mk-sellbar');
