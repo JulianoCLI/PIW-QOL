@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.4.1
+// @version      9.4.2
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -377,8 +377,8 @@
         .ha-script-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; padding: 0 8px 8px 8px; }
         .ha-sbtn { background: #1a2d3a; color: #a0aec0; border: 1px solid #273f52; border-radius: 6px; padding: 6px 4px; font-size: 11px; cursor: pointer; transition: all 0.15s ease; text-align: center; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 4px; }
         .ha-sbtn:hover { background: #3182ce; color: #fff; border-color: #3182ce; }
-        .ha-catch-stats { font-size: 11px; color: #a0aec0; text-align: center; margin: 6px 8px; padding-top: 8px; border-top: 1px solid #1a2d3a; }
-        .ha-catch-stats b { color: #e2e8f0; font-weight: bold; }
+        .ha-catch-stats { display: block; width: 100%; text-align: center; margin-top: 4px; }
+        .ha-catch-stats.hidden { display: none !important; }
 
         /* Compare Modal */
         .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
@@ -1358,9 +1358,30 @@
         const ratesNode = haWindow.querySelector('.ha-rates');
         let balHour = 0, xpHour = 0;
         if (ratesNode) {
-            const spans = ratesNode.querySelectorAll('span');
+            const spans = ratesNode.querySelectorAll('span:not(.ha-catch-stats)');
             if (spans[0]) balHour = parseInt(spans[0].textContent.replace(/−/g, '-').replace(/[.]/g, '').replace(/[^0-9-]/g, ''), 10) || 0;
             if (spans[1]) xpHour = parseInt(spans[1].textContent.replace(/[.]/g, '').replace(/[^0-9]/g, ''), 10) || 0;
+
+            let catchStats = ratesNode.querySelector('.ha-catch-stats');
+            if (!catchStats) {
+                catchStats = document.createElement('span');
+                catchStats.className = 'ha-rate ha-catch-stats';
+                ratesNode.appendChild(catchStats);
+            }
+            if (lastCatchTimestamp) {
+                const diffMs = Date.now() - lastCatchTimestamp;
+                const diffM = Math.floor(diffMs / 60000);
+                const timeStr = diffM > 0 ? `há ${diffM}m` : 'agora';
+                const dateStr = new Date(lastCatchTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                const ballsSpent = currentBalls - ballsAtLastCatch;
+                const newText = `🔴 Último catch: ${dateStr} (${timeStr}) • ${ballsSpent} balls`;
+                if (catchStats.textContent !== newText) {
+                    catchStats.textContent = newText;
+                }
+                catchStats.classList.remove('hidden');
+            } else {
+                catchStats.classList.add('hidden');
+            }
         }
 
         const snapshot = { defeated, timeText, balance, balHour, xpHour };
@@ -1391,26 +1412,6 @@
 
         const oldToggle = haWindow.querySelector('.ha-title .ha-btn-toggle-view');
         if (oldToggle) oldToggle.remove();
-
-        let catchStats = haWindow.querySelector('.ha-catch-stats');
-        let isNewStats = false;
-        if (!catchStats) {
-            catchStats = document.createElement('div');
-            catchStats.className = 'ha-catch-stats';
-            isNewStats = true;
-        }
-        
-        if (lastCatchTimestamp) {
-            const diffMs = Date.now() - lastCatchTimestamp;
-            const diffM = Math.floor(diffMs / 60000);
-            const timeStr = diffM > 0 ? `há ${diffM}m` : 'agora';
-            const dateStr = new Date(lastCatchTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            const ballsSpent = currentBalls - ballsAtLastCatch;
-            catchStats.innerHTML = `Último catch: <b>${dateStr}</b> (${timeStr}) &nbsp;•&nbsp; 🔴 <b>${ballsSpent}</b> balls usadas`;
-            catchStats.style.display = 'block';
-        } else {
-            catchStats.style.display = 'none';
-        }
 
         let actionArea = haWindow.querySelector('.ha-script-actions');
         let isNewActionArea = false;
@@ -1448,14 +1449,12 @@
             actionArea.appendChild(compareBtn);
         }
 
-        if (isNewStats || isNewActionArea) {
+        if (isNewActionArea) {
             const clogBtn = haWindow.querySelector('.ha-clog-btn');
             if (clogBtn) {
-                if (isNewStats) clogBtn.before(catchStats);
-                if (isNewActionArea) clogBtn.before(actionArea);
+                clogBtn.before(actionArea);
             } else {
-                if (isNewStats) haWindow.appendChild(catchStats);
-                if (isNewActionArea) haWindow.appendChild(actionArea);
+                haWindow.appendChild(actionArea);
             }
         }
     }
