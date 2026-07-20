@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.1.4
+// @version      9.1.5
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1051,35 +1051,45 @@
                 }
             });
             
-            // Intercept Sell CTA
-            const sellCta = mkWindow.querySelector('button.mk-sell');
-            if (sellCta && !sellCta.dataset.intercepted) {
-                const reactPropsKey = Object.keys(sellCta).find(k => k.startsWith('__reactProps$'));
-                if (reactPropsKey && sellCta[reactPropsKey] && sellCta[reactPropsKey].onClick) {
-                    const origClick = sellCta[reactPropsKey].onClick;
-                    sellCta[reactPropsKey].onClick = (e) => {
-                        const confirmList = getSellConfirmItems();
-                        const selectedToConfirm = [];
-                        mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
-                            const cb = row.querySelector('input.mk-check');
-                            if (cb && cb.checked) {
-                                const nameEl = row.querySelector('.mk-name');
-                                const itemName = nameEl ? nameEl.textContent.trim() : '';
-                                if (confirmList.includes(itemName)) {
-                                    selectedToConfirm.push(itemName);
-                                }
+            // Intercept Sell CTA via event delegation on the sellbar
+            const sellBar = mkWindow.querySelector('.mk-sellbar');
+            if (sellBar && !sellBar.dataset.sellIntercepted) {
+                let sellConfirmed = false;
+                sellBar.addEventListener('click', (e) => {
+                    const sellBtn = e.target.closest('button.mk-sell');
+                    if (!sellBtn || sellBtn.disabled) return;
+                    
+                    // If we already confirmed, let it through
+                    if (sellConfirmed) {
+                        sellConfirmed = false;
+                        return;
+                    }
+                    
+                    const confirmList = getSellConfirmItems();
+                    const selectedToConfirm = [];
+                    mkWindow.querySelectorAll('.mk-srow-head').forEach(row => {
+                        const cb = row.querySelector('input.mk-check');
+                        if (cb && cb.checked) {
+                            const nameEl = row.querySelector('.mk-name');
+                            const itemName = nameEl ? nameEl.textContent.trim() : '';
+                            if (confirmList.includes(itemName)) {
+                                selectedToConfirm.push(itemName);
+                            }
+                        }
+                    });
+                    
+                    if (selectedToConfirm.length > 0) {
+                        e.stopImmediatePropagation();
+                        e.preventDefault();
+                        showSellConfirm(selectedToConfirm, (confirmed) => {
+                            if (confirmed) {
+                                sellConfirmed = true;
+                                sellBtn.click();
                             }
                         });
-                        if (selectedToConfirm.length > 0) {
-                            showSellConfirm(selectedToConfirm, (confirmed) => {
-                                if (confirmed) origClick(e);
-                            });
-                        } else {
-                            origClick(e);
-                        }
-                    };
-                    sellCta.dataset.intercepted = 'true';
-                }
+                    }
+                }, true); // capture phase – runs before React's handler
+                sellBar.dataset.sellIntercepted = 'true';
             }
         }
         
