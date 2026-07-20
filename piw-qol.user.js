@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.1.5
+// @version      9.2.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -347,6 +347,14 @@
         .sell-confirm-btn { padding: 6px 12px; margin: 0 6px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .sell-confirm-btn.yes { background: #48bb78; color: #fff; }
         .sell-confirm-btn.no { background: #f56565; color: #fff; }
+
+        .dex-script-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-top: 1px solid #1a2d3a; }
+        .dex-fbtn { padding: 4px 10px; border: 1px solid #273f52; background: #0c161f; color: #a0aec0; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
+        .dex-fbtn:hover { border-color: #3182ce; color: #e2e8f0; }
+        .dex-fbtn.on { background: #3182ce; color: #fff; border-color: #3182ce; }
+        .dex-ft-label { display: flex; align-items: center; gap: 4px; color: #a0aec0; font-size: 12px; cursor: pointer; margin-left: auto; }
+        .dex-ft-label input { cursor: pointer; }
+        .dex-cell.dex-hidden { display: none !important; }
     `;
     document.head.appendChild(style);
 
@@ -1120,11 +1128,138 @@
         }
     }
 
+    function injectDexEnhancements() {
+        const dexWindow = document.querySelector('.dex-window');
+        if (!dexWindow || dexWindow.querySelector('.dex-script-controls')) return;
+
+        const dexControls = dexWindow.querySelector('.dex-controls');
+        if (!dexControls) return;
+
+        const bar = document.createElement('div');
+        bar.className = 'dex-script-controls';
+        bar.innerHTML = `
+            <button class="dex-fbtn on" data-filter="all" type="button">Todos</button>
+            <button class="dex-fbtn" data-filter="caught" type="button">✓ Caught</button>
+            <button class="dex-fbtn" data-filter="notcaught" type="button">✗ Not Caught</button>
+            <button class="dex-fbtn" data-filter="sort-value" type="button" style="display:none;">💰 Menor Valor</button>
+            <label class="dex-ft-label"><input type="checkbox" class="dex-ft-check"> ⚡ Fast Travel</label>
+        `;
+        dexControls.after(bar);
+
+        const grid = dexWindow.querySelector('.dex-grid');
+        if (!grid) return;
+
+        const filterBtns = bar.querySelectorAll('.dex-fbtn[data-filter]');
+        const sortBtn = bar.querySelector('.dex-fbtn[data-filter="sort-value"]');
+        const ftCheck = bar.querySelector('.dex-ft-check');
+        let currentFilter = 'all';
+        let sortedByValue = false;
+        let originalOrder = null;
+
+        function applyFilter() {
+            const cells = grid.querySelectorAll('.dex-cell');
+            cells.forEach(cell => {
+                const isCaught = cell.classList.contains('caught');
+                if (currentFilter === 'all') {
+                    cell.classList.remove('dex-hidden');
+                } else if (currentFilter === 'caught') {
+                    cell.classList.toggle('dex-hidden', !isCaught);
+                } else if (currentFilter === 'notcaught') {
+                    cell.classList.toggle('dex-hidden', isCaught);
+                }
+            });
+        }
+
+        function getPokeValue(name) {
+            const cleanName = name.toLowerCase().trim();
+            if (globalCreatureApiData.has(cleanName)) {
+                const pokeObj = globalCreatureApiData.get(cleanName);
+                const possiblePriceKeys = ['sellValue', 'priceNpc', 'sell', 'sellsFor', 'price', 'value', 'gold', 'money', 'cost', 'reward'];
+                for (const key of possiblePriceKeys) {
+                    if (pokeObj[key] !== undefined && pokeObj[key] !== null && pokeObj[key] !== '') {
+                        const parsed = parseInt(String(pokeObj[key]).replace(/\D/g, ''), 10);
+                        if (!isNaN(parsed) && parsed > 0) return parsed;
+                    }
+                }
+            }
+            return 999999;
+        }
+
+        function sortByValue() {
+            if (!originalOrder) {
+                originalOrder = Array.from(grid.children);
+            }
+            const cells = Array.from(grid.querySelectorAll('.dex-cell'));
+            cells.sort((a, b) => {
+                const nameA = a.querySelector('.dex-cell-name')?.textContent || '';
+                const nameB = b.querySelector('.dex-cell-name')?.textContent || '';
+                return getPokeValue(nameA) - getPokeValue(nameB);
+            });
+            cells.forEach(c => grid.appendChild(c));
+            sortedByValue = true;
+        }
+
+        function restoreOrder() {
+            if (originalOrder) {
+                originalOrder.forEach(c => grid.appendChild(c));
+                sortedByValue = false;
+            }
+        }
+
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.dataset.filter;
+                if (filter === 'sort-value') {
+                    if (sortedByValue) {
+                        restoreOrder();
+                        btn.classList.remove('on');
+                    } else {
+                        sortByValue();
+                        btn.classList.add('on');
+                    }
+                    applyFilter();
+                    return;
+                }
+                currentFilter = filter;
+                filterBtns.forEach(b => {
+                    if (b.dataset.filter !== 'sort-value') b.classList.remove('on');
+                });
+                btn.classList.add('on');
+
+                if (filter === 'notcaught') {
+                    sortBtn.style.display = '';
+                } else {
+                    sortBtn.style.display = 'none';
+                    if (sortedByValue) {
+                        restoreOrder();
+                        sortBtn.classList.remove('on');
+                    }
+                }
+                applyFilter();
+            });
+        });
+
+        // Fast Travel: intercept clicks on dex-cell
+        grid.addEventListener('click', (e) => {
+            if (!ftCheck.checked) return;
+            const cell = e.target.closest('.dex-cell');
+            if (!cell) return;
+            e.stopPropagation();
+            e.preventDefault();
+
+            const pokeName = cell.querySelector('.dex-cell-name')?.textContent?.trim();
+            if (!pokeName) return;
+
+            teleportToTarget(pokeName);
+        }, true);
+    }
+
     const observer = new MutationObserver(() => {
         injectQuickTPButton();
         injectConfigTab();
         applyChatState();
         injectShopEnhancements();
+        injectDexEnhancements();
 
         const mapWindow = document.querySelector('.map-window');
         if (mapWindow) {
