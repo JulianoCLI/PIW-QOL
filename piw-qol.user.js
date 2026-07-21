@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.7.4
+// @version      9.7.5
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -506,19 +506,31 @@
     function teleportToTarget(huntName) {
         if (!huntName) return alert('Nenhuma hunt definida!');
         const mapBtn = document.querySelector('button[data-guide="dock-map"]');
-        let markers = Array.from(document.querySelectorAll('.hunt-marker'));
+        const mapWindow = document.querySelector('.map-window');
 
-        if (markers.length === 0 && mapBtn) mapBtn.click();
+        if (mapWindow && mapWindow.style.display !== 'block' && mapBtn) {
+            mapBtn.click();
+        }
 
-        setTimeout(() => {
-            markers = Array.from(document.querySelectorAll('.hunt-marker'));
+        let attempts = 0;
+        const interval = setInterval(() => {
+            const markers = Array.from(document.querySelectorAll('.hunt-marker'));
             const targetMarker = markers.find(m => {
                 const nameEl = m.querySelector('.hunt-name');
                 return nameEl && nameEl.textContent.trim().toLowerCase() === huntName.toLowerCase();
             });
-            if (targetMarker) targetMarker.click();
-            else alert(`Hunt "${huntName}" não foi localizada.`);
-        }, 150);
+
+            if (targetMarker) {
+                clearInterval(interval);
+                targetMarker.click();
+            } else {
+                attempts++;
+                if (attempts >= 20) {
+                    clearInterval(interval);
+                    alert(`Hunt "${huntName}" não foi localizada na área atual.`);
+                }
+            }
+        }, 100);
     }
 
     function teleportToFavorite() {
