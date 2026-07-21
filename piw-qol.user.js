@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.7.5
+// @version      9.8.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -513,6 +513,7 @@
         }
 
         let attempts = 0;
+        let checkedTabs = new Set();
         const interval = setInterval(() => {
             const markers = Array.from(document.querySelectorAll('.hunt-marker'));
             const targetMarker = markers.find(m => {
@@ -523,12 +524,32 @@
             if (targetMarker) {
                 clearInterval(interval);
                 targetMarker.click();
-            } else {
-                attempts++;
-                if (attempts >= 20) {
-                    clearInterval(interval);
-                    alert(`Hunt "${huntName}" não foi localizada na área atual.`);
+                return;
+            }
+
+            attempts++;
+            
+            if (attempts % 4 === 0) {
+                const activeTab = document.querySelector('.map-area.on');
+                if (activeTab) {
+                    const activeName = activeTab.querySelector('.map-area-name');
+                    if (activeName) checkedTabs.add(activeName.textContent.trim());
                 }
+
+                const allTabs = Array.from(document.querySelectorAll('.map-area:not(.locked)'));
+                const nextTab = allTabs.find(tab => {
+                    const nameEl = tab.querySelector('.map-area-name');
+                    return nameEl && !checkedTabs.has(nameEl.textContent.trim());
+                });
+
+                if (nextTab) {
+                    nextTab.click();
+                }
+            }
+
+            if (attempts >= 25) {
+                clearInterval(interval);
+                alert(`Hunt "${huntName}" não foi localizada em nenhuma área.`);
             }
         }, 100);
     }
