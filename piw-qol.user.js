@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.8.1
+// @version      9.9.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -24,6 +24,10 @@
     const STORAGE_DEX_FAST_TRAVEL = 'script_dex_fast_travel_v1';
     const STORAGE_GUARD_LEGENDARY = 'script_guard_legendary_v1';
     const STORAGE_GUARD_SELL_LOCK = 'script_guard_sell_lock_v1';
+    const STORAGE_HA_COMPACT = 'script_ha_compact_v1';
+    const STORAGE_HA_DROPS = 'script_ha_drops_v1';
+    const STORAGE_DEX_FILTER = 'script_dex_filter_v1';
+    const STORAGE_DEX_SORT_VALUE = 'script_dex_sort_value_v1';
 
     let isRendering = false;
     const globalCreatureApiData = new Map();
@@ -458,6 +462,15 @@
 
     function isGuardSellLockActive() { return localStorage.getItem(STORAGE_GUARD_SELL_LOCK) !== 'false'; }
     function setGuardSellLock(val) { localStorage.setItem(STORAGE_GUARD_SELL_LOCK, val ? 'true' : 'false'); }
+
+    function isHaCompact() { return localStorage.getItem(STORAGE_HA_COMPACT) === 'true'; }
+    function setHaCompact(val) { localStorage.setItem(STORAGE_HA_COMPACT, val ? 'true' : 'false'); }
+    function isHaDropsVisible() { return localStorage.getItem(STORAGE_HA_DROPS) === 'true'; }
+    function setHaDropsVisible(val) { localStorage.setItem(STORAGE_HA_DROPS, val ? 'true' : 'false'); }
+    function getDexFilter() { return localStorage.getItem(STORAGE_DEX_FILTER) || 'all'; }
+    function setDexFilter(val) { localStorage.setItem(STORAGE_DEX_FILTER, val); }
+    function isDexSortedByValue() { return localStorage.getItem(STORAGE_DEX_SORT_VALUE) === 'true'; }
+    function setDexSortedByValue(val) { localStorage.setItem(STORAGE_DEX_SORT_VALUE, val ? 'true' : 'false'); }
 
     function applyMapScriptState() {
         const active = isScriptMapActive();
@@ -1368,10 +1381,8 @@
         const dexWindow = document.querySelector('.dex-window');
         if (!dexWindow) return;
 
-        // If a dex-cell-detail is open (pokemon detail page), grid won't be present
         const grid = dexWindow.querySelector('.dex-grid');
         if (!grid) {
-            // Remove stale controls if grid is gone (user opened a pokemon page)
             const stale = dexWindow.querySelector('.dex-script-controls');
             if (stale) stale.remove();
             return;
@@ -1384,12 +1395,41 @@
 
         const ftEnabled = isDexFastTravelActive();
 
+        // Build set of hunt-able pokemon names from globalCreatureApiData
+        const huntableNames = new Set();
+        for (const [name, data] of globalCreatureApiData.entries()) {
+            if (data.hunts && data.hunts.length > 0) huntableNames.add(name);
+            if (data.hunt) huntableNames.add(name);
+            if (data.area || data.map || data.location) huntableNames.add(name);
+            if (data.slug) huntableNames.add(name);
+        }
+
+        // Mark cells that have no hunt with a red X badge
+        grid.querySelectorAll('.dex-cell').forEach(cell => {
+            if (cell.querySelector('.dex-no-hunt-badge')) return;
+            const nameEl = cell.querySelector('.dex-cell-name');
+            if (!nameEl) return;
+            const pokeName = nameEl.textContent.trim().toLowerCase();
+            const hasData = globalCreatureApiData.has(pokeName);
+            // Only mark if we have loaded data and the pokemon has no hunt
+            if (hasData && huntableNames.size > 0 && !huntableNames.has(pokeName)) {
+                const badge = document.createElement('span');
+                badge.className = 'dex-no-hunt-badge';
+                badge.textContent = '✕';
+                badge.title = 'Sem hunt disponível';
+                badge.style.cssText = 'position:absolute;top:2px;right:2px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;line-height:1;font-weight:bold;pointer-events:none;';
+                cell.style.position = 'relative';
+                cell.appendChild(badge);
+            }
+        });
+
         const bar = document.createElement('div');
         bar.className = 'dex-script-controls';
         bar.innerHTML = `
-            <button class="dex-fbtn on" data-filter="all" type="button">Todos</button>
+            <button class="dex-fbtn" data-filter="all" type="button">Todos</button>
             <button class="dex-fbtn" data-filter="caught" type="button">✓ Caught</button>
             <button class="dex-fbtn" data-filter="notcaught" type="button">✗ Not Caught</button>
+            <button class="dex-fbtn" data-filter="claimable" type="button">🎁 To Claim</button>
             <button class="dex-fbtn" data-filter="sort-value" type="button" style="display:none;">💰 Menor Valor</button>
             ${ftEnabled ? '<label class="dex-ft-label"><input type="checkbox" class="dex-ft-check"> ⚡ Fast Travel</label>' : ''}
         `;
@@ -1397,33 +1437,39 @@
 
         const filterBtns = bar.querySelectorAll('.dex-fbtn[data-filter]');
         const sortBtn = bar.querySelector('.dex-fbtn[data-filter="sort-value"]');
-        let currentFilter = 'all';
-        let sortedByValue = false;
+
+        // Restore persisted state
+        let currentFilter = getDexFilter();
+        let sortedByValue = isDexSortedByValue();
         let originalOrder = null;
 
         function applyFilter() {
             const cells = grid.querySelectorAll('.dex-cell');
             cells.forEach(cell => {
                 const isCaught = cell.classList.contains('caught');
+                const isClaimable = cell.classList.contains('claimable');
                 if (currentFilter === 'all') {
                     cell.classList.remove('dex-hidden');
                 } else if (currentFilter === 'caught') {
                     cell.classList.toggle('dex-hidden', !isCaught);
                 } else if (currentFilter === 'notcaught') {
                     cell.classList.toggle('dex-hidden', isCaught);
+                } else if (currentFilter === 'claimable') {
+                    cell.classList.toggle('dex-hidden', !isClaimable);
                 }
             });
         }
 
         function getPokeValue(name) {
             const cleanName = name.toLowerCase().trim();
+            const noHunt = huntableNames.size > 0 && !huntableNames.has(cleanName);
             if (globalCreatureApiData.has(cleanName)) {
                 const pokeObj = globalCreatureApiData.get(cleanName);
                 const possiblePriceKeys = ['sellValue', 'priceNpc', 'sell', 'sellsFor', 'price', 'value', 'gold', 'money', 'cost', 'reward'];
                 for (const key of possiblePriceKeys) {
                     if (pokeObj[key] !== undefined && pokeObj[key] !== null && pokeObj[key] !== '') {
                         const parsed = parseInt(String(pokeObj[key]).replace(/\D/g, ''), 10);
-                        if (!isNaN(parsed) && parsed > 0) return parsed;
+                        if (!isNaN(parsed) && parsed > 0) return noHunt ? 99999999 : parsed;
                     }
                 }
             }
@@ -1431,9 +1477,7 @@
         }
 
         function sortByValue() {
-            if (!originalOrder) {
-                originalOrder = Array.from(grid.children);
-            }
+            if (!originalOrder) originalOrder = Array.from(grid.children);
             const cells = Array.from(grid.querySelectorAll('.dex-cell'));
             cells.sort((a, b) => {
                 const nameA = a.querySelector('.dex-cell-name')?.textContent || '';
@@ -1442,14 +1486,26 @@
             });
             cells.forEach(c => grid.appendChild(c));
             sortedByValue = true;
+            setDexSortedByValue(true);
         }
 
         function restoreOrder() {
             if (originalOrder) {
                 originalOrder.forEach(c => grid.appendChild(c));
                 sortedByValue = false;
+                setDexSortedByValue(false);
             }
         }
+
+        // Apply persisted sort
+        if (sortedByValue) sortByValue();
+
+        // Apply persisted filter and update button states
+        filterBtns.forEach(b => b.classList.remove('on'));
+        const activeBtn = bar.querySelector(`.dex-fbtn[data-filter="${currentFilter}"]`);
+        if (activeBtn) activeBtn.classList.add('on');
+        if (currentFilter === 'notcaught') sortBtn.style.display = '';
+        applyFilter();
 
         filterBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1466,6 +1522,7 @@
                     return;
                 }
                 currentFilter = filter;
+                setDexFilter(filter);
                 filterBtns.forEach(b => {
                     if (b.dataset.filter !== 'sort-value') b.classList.remove('on');
                 });
@@ -1686,13 +1743,26 @@
         const oldToggle = haWindow.querySelector('.ha-title .ha-btn-toggle-view');
         if (oldToggle) oldToggle.remove();
 
+        // Apply persisted compact state on first injection
+        if (!haWindow.dataset.haInitialized) {
+            if (isHaCompact()) haWindow.classList.add('ha-compact');
+            haWindow.dataset.haInitialized = 'true';
+        }
+
+        // Apply persisted drops visibility
+        const drops = haWindow.querySelector('.ha-drops');
+        if (drops && !haWindow.dataset.haDropsInit) {
+            if (isHaDropsVisible()) drops.classList.add('show-drops');
+            haWindow.dataset.haDropsInit = 'true';
+        }
+
         let actionArea = haWindow.querySelector('.ha-script-actions');
         let isNewActionArea = false;
         if (!actionArea) {
             actionArea = document.createElement('div');
             actionArea.className = 'ha-script-actions';
             isNewActionArea = true;
-            
+
             const toggleBtn = document.createElement('button');
             toggleBtn.className = 'ha-sbtn btn-toggle-view';
             toggleBtn.innerHTML = haWindow.classList.contains('ha-compact') ? '⤢ Expandir' : '⤡ Reduzir';
@@ -1700,6 +1770,7 @@
             toggleBtn.addEventListener('click', () => {
                 const isCompact = haWindow.classList.toggle('ha-compact');
                 toggleBtn.innerHTML = isCompact ? '⤢ Expandir' : '⤡ Reduzir';
+                setHaCompact(isCompact);
             });
 
             const dropBtn = document.createElement('button');
@@ -1707,8 +1778,11 @@
             dropBtn.innerHTML = '📦 Drops';
             dropBtn.type = 'button';
             dropBtn.addEventListener('click', () => {
-                const drops = haWindow.querySelector('.ha-drops');
-                if (drops) drops.classList.toggle('show-drops');
+                const dropsEl = haWindow.querySelector('.ha-drops');
+                if (dropsEl) {
+                    const visible = dropsEl.classList.toggle('show-drops');
+                    setHaDropsVisible(visible);
+                }
             });
 
             const compareBtn = document.createElement('button');
@@ -1723,11 +1797,12 @@
         }
 
         if (isNewActionArea) {
-            const clogBtn = haWindow.querySelector('.ha-clog-btn');
-            if (clogBtn) {
-                clogBtn.before(actionArea);
+            // Insert right after the main title so it's always visible
+            const haTitle = haWindow.querySelector('h3, .ha-head, .ha-header');
+            if (haTitle) {
+                haTitle.after(actionArea);
             } else {
-                haWindow.appendChild(actionArea);
+                haWindow.prepend(actionArea);
             }
         }
     }
