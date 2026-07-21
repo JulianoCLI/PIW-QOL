@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.8.0
+// @version      9.8.1
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -503,55 +503,73 @@
         return nameEl ? nameEl.textContent.trim().toLowerCase() : '';
     }
 
-    function teleportToTarget(huntName) {
-        if (!huntName) return alert('Nenhuma hunt definida!');
-        const mapBtn = document.querySelector('button[data-guide="dock-map"]');
-        const mapWindow = document.querySelector('.map-window');
-
-        if (mapWindow && mapWindow.style.display !== 'block' && mapBtn) {
-            mapBtn.click();
+    async function teleportToTarget(huntName) {
+        if (!huntName) {
+            alert('Nenhuma hunt definida!');
+            return;
         }
 
-        let attempts = 0;
-        let checkedTabs = new Set();
-        const interval = setInterval(() => {
-            const markers = Array.from(document.querySelectorAll('.hunt-marker'));
-            const targetMarker = markers.find(m => {
-                const nameEl = m.querySelector('.hunt-name');
-                return nameEl && nameEl.textContent.trim().toLowerCase() === huntName.toLowerCase();
-            });
+        const mapBtn = document.querySelector('button[data-guide="dock-map"]');
+        let mapWindow = document.querySelector('.map-window');
 
-            if (targetMarker) {
-                clearInterval(interval);
-                targetMarker.click();
-                return;
-            }
+        if (!mapWindow || mapWindow.style.display !== 'block') {
+            if (mapBtn) mapBtn.click();
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
 
-            attempts++;
-            
-            if (attempts % 4 === 0) {
-                const activeTab = document.querySelector('.map-area.on');
-                if (activeTab) {
-                    const activeName = activeTab.querySelector('.map-area-name');
-                    if (activeName) checkedTabs.add(activeName.textContent.trim());
-                }
+        mapWindow = document.querySelector('.map-window');
+        if (!mapWindow) {
+            alert('Mapa não abriu.');
+            return;
+        }
 
-                const allTabs = Array.from(document.querySelectorAll('.map-area:not(.locked)'));
-                const nextTab = allTabs.find(tab => {
-                    const nameEl = tab.querySelector('.map-area-name');
-                    return nameEl && !checkedTabs.has(nameEl.textContent.trim());
+        let allTabs = Array.from(mapWindow.querySelectorAll('.map-area:not(.locked)'));
+        if (allTabs.length === 0) {
+            const found = await tryFindMarkerAsync(huntName, 20, 100);
+            if (!found) alert(`Hunt "${huntName}" não foi localizada.`);
+            return;
+        }
+
+        const activeTab = mapWindow.querySelector('.map-area.on');
+        if (activeTab) {
+            const found = await tryFindMarkerAsync(huntName, 10, 100);
+            if (found) return;
+        }
+
+        for (const tab of allTabs) {
+            if (tab === activeTab) continue;
+
+            tab.click();
+            const found = await tryFindMarkerAsync(huntName, 20, 100);
+            if (found) return;
+        }
+
+        alert(`Hunt "${huntName}" não foi localizada em nenhuma área.`);
+    }
+
+    function tryFindMarkerAsync(huntName, maxAttempts, intervalMs) {
+        return new Promise(resolve => {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                const markers = Array.from(document.querySelectorAll('.hunt-marker'));
+                const targetMarker = markers.find(m => {
+                    const nameEl = m.querySelector('.hunt-name');
+                    return nameEl && nameEl.textContent.trim().toLowerCase() === huntName.toLowerCase();
                 });
 
-                if (nextTab) {
-                    nextTab.click();
+                if (targetMarker) {
+                    clearInterval(interval);
+                    targetMarker.click();
+                    resolve(true);
+                } else {
+                    attempts++;
+                    if (attempts >= maxAttempts) {
+                        clearInterval(interval);
+                        resolve(false);
+                    }
                 }
-            }
-
-            if (attempts >= 25) {
-                clearInterval(interval);
-                alert(`Hunt "${huntName}" não foi localizada em nenhuma área.`);
-            }
-        }, 100);
+            }, intervalMs);
+        });
     }
 
     function teleportToFavorite() {
