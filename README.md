@@ -1,4 +1,4 @@
-﻿# 🎮 Pokémon Map & Hunt Enhancer Pro
+# 🎮 Pokémon Map & Hunt Enhancer Pro
 
 > Script de Qualidade de Vida para o jogo [Pokémon Idle World](https://poke.idleworld.online/play), feito pela comunidade.
 
@@ -99,13 +99,14 @@ O mapa visual padrão é substituído por uma lista limpa e ordenável com todas
 
 **Modos de ordenação disponíveis (dropdown no topo):**
 
+> ℹ️ **Nota:** Independentemente do filtro escolhido, suas hunts **Favoritas** estarão sempre fixadas no topo. As **cidades vazias** são ocultadas automaticamente para limpar a interface.
+
 | Modo | Descrição |
 |------|-----------|
-| Favoritos Primeiro | Suas hunts favoritas aparecem no topo |
 | Preço: Maior → Menor | Ordena pelo valor de venda |
 | Preço: Menor → Maior | Inverso do anterior |
-| Efetividade: Maior Vantagem | Mostra hunts onde seu Pokémon tem maior vantagem de tipo |
-| XP × Efetividade | Combina XP e vantagem de tipo para o melhor ganho por hora |
+| Efetividade: Maior Vantagem | Ordena pelas maiores vantagens de tipo (desempate por Level) |
+| Somente XP | Ordena pelo maior ganho de XP (priorizando as de maior efetividade de tipo) |
 
 **Preview de Drops (configurável):**
 - **Hover:** Passe o mouse sobre a hunt para ver os drops em tooltip
@@ -136,6 +137,8 @@ O mapa visual padrão é substituído por uma lista limpa e ordenável com todas
 Um botão extra é adicionado à dock do jogo. Ao clicar:
 - **Modo ★ (Favorita):** Teletransporta diretamente para sua hunt favorita
 - **Modo ↺ (Última):** Teletransporta para a última hunt que você visitou
+
+> 🤖 **Smart Search:** O script procura automaticamente pela hunt varrendo todas as abas (áreas) do mapa de forma invisível. Você não precisa se preocupar em qual aba o mapa estava (Kanto, Outland, etc).
 
 O modo é configurável em **Configurações → Script Mods → Nav Dock Button Action**.
 
@@ -274,6 +277,8 @@ Uma aba extra "Script Mods" é adicionada ao painel de configurações nativo do
 | **Nav Dock Button Action** | ★ Favorita / ↺ Última |
 | **Chat Interface** | Exibir / Ocultar |
 | **Sell Confirmation Items** | Lista editável com busca e ícones dos itens |
+| **Desmarcar Itens com Cadeado (Aba Loja)** | Ligado / Desligado |
+| **Proteção de Venda (Pokémons Raros)** | Ligado / Desligado |
 
 ---
 
@@ -290,6 +295,8 @@ Todas as preferências são salvas localmente no **localStorage** do navegador �
 | `script_nav_tp_mode_v1` | `fav` | Modo do botão de teleporte (`fav` ou `last`) |
 | `script_drop_mode_v1` | `hover` | Como ver drops na lista (`hover`, `icon`, `off`) |
 | `script_sell_confirm_items_v1` | (lista padrão) | Itens protegidos contra venda |
+| `script_shop_unselect_lock_v1` | `true` | Proteção contra venda (Itens cadeado) |
+| `script_shop_unselect_legendary_v1` | `true` | Proteção contra venda (Lendários) |
 
 ---
 
