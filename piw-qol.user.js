@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.5
+// @version      9.9.61
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -638,7 +638,7 @@
         .hunt-sell-row input[type="number"] { width: 100%; box-sizing: border-box; background: #0c161f; color: #e2e8f0; border: 1px solid #273f52; border-radius: 4px; padding: 5px; }
         .hunt-sell-row.protected { opacity: 0.45; }
 
-        .sell-confirm-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .sell-confirm-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10150; display: flex; align-items: center; justify-content: center; }
         .sell-confirm-modal { background: #0c161f; border: 1px solid #273f52; border-radius: 8px; padding: 0; color: #e2e8f0; width: 320px; box-shadow: 0 12px 32px rgba(0,0,0,0.8); overflow: hidden; }
         .sell-confirm-title { background: #14222d; border-bottom: 1px solid #273f52; padding: 12px 16px; font-size: 15px; font-weight: bold; color: #63b3ed; display: flex; align-items: center; gap: 8px; }
         .sell-confirm-body { padding: 16px; }
@@ -1762,22 +1762,25 @@
         });
     }
 
-    function showPurchaseConfirm({ name, quantity, unitPrice, currentGold }, callback) {
+    function showPurchaseConfirm({ name, quantity, unitPrice, currentGold, currentBalance, currency = 'GOLD' }, callback) {
         const total = quantity * unitPrice;
+        const balance = Number(currentBalance ?? currentGold ?? 0);
+        const currencyIcon = String(currency).toUpperCase() === 'DIAMONDS' ? '💎' : '💲';
+        const locale = getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US';
         const backdrop = document.createElement('div');
         backdrop.className = 'sell-confirm-backdrop';
         backdrop.innerHTML = `
             <div class="sell-confirm-modal">
                 <div class="sell-confirm-title">🛒 Confirmar compra</div>
                 <div class="sell-confirm-body">
-                    <p><b>${quantity.toLocaleString('pt-BR')}× ${escapeHTML(name)}</b></p>
+                    <p><b>${quantity.toLocaleString(locale)}× ${escapeHTML(name)}</b></p>
                     <div class="sell-confirm-items">
-                        <div>Preço unitário: 💲${unitPrice.toLocaleString('pt-BR')}</div>
-                        <div>Total: 💲${total.toLocaleString('pt-BR')}</div>
-                        <div>Saldo após compra: 💲${Math.max(0, currentGold - total).toLocaleString('pt-BR')}</div>
+                        <div>Preço unitário: ${currencyIcon}${unitPrice.toLocaleString(locale)}</div>
+                        <div>Total: ${currencyIcon}${total.toLocaleString(locale)}</div>
+                        <div>Saldo após compra: ${currencyIcon}${Math.max(0, balance - total).toLocaleString(locale)}</div>
                     </div>
                     <div class="sell-confirm-footer">
-                        <button class="sell-confirm-btn yes" type="button" ${total > currentGold ? 'disabled' : ''}>Confirmar</button>
+                        <button class="sell-confirm-btn yes" type="button" ${total > balance ? 'disabled' : ''}>Confirmar</button>
                         <button class="sell-confirm-btn no" type="button">Cancelar</button>
                     </div>
                 </div>
@@ -1817,6 +1820,7 @@
             <div class="sell-confirm-modal" style="width:460px; max-width:94vw;">
                 <div class="sell-confirm-title">
                     <span>🛒 Vender itens</span>
+                    <button class="hunt-sell-select-all mk-bulk-btn" type="button" style="margin-left:auto;display:none;">☑ Selecionar tudo</button>
                     <button class="hunt-pokemon-open mk-bulk-btn" type="button" style="margin-left:auto;">🐾 Pokémon</button>
                     <button class="hunt-sell-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
                 </div>
@@ -1844,6 +1848,7 @@
         const list = backdrop.querySelector('.hunt-sell-list');
         const footer = backdrop.querySelector('.sell-confirm-footer');
         const submit = backdrop.querySelector('.hunt-sell-submit');
+        const selectAll = backdrop.querySelector('.hunt-sell-select-all');
 
         try {
             const [inventory, shopData] = await Promise.all([
@@ -1919,7 +1924,18 @@
                 });
                 status.textContent = `Saldo atual: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Venda selecionada: 💲${total.toLocaleString('pt-BR')}`;
                 status.style.display = '';
+                const eligible = Array.from(list.querySelectorAll('input[type="checkbox"]:not(:disabled)'));
+                selectAll.textContent = eligible.length > 0 && eligible.every(checkbox => checkbox.checked)
+                    ? '☐ Desmarcar tudo'
+                    : '☑ Selecionar tudo';
             };
+            selectAll.style.display = '';
+            selectAll.addEventListener('click', () => {
+                const eligible = Array.from(list.querySelectorAll('input[type="checkbox"]:not(:disabled)'));
+                const shouldSelect = eligible.some(checkbox => !checkbox.checked);
+                eligible.forEach(checkbox => { checkbox.checked = shouldSelect; });
+                updateSaleSummary();
+            });
             list.addEventListener('input', updateSaleSummary);
             list.addEventListener('change', updateSaleSummary);
             updateSaleSummary();
@@ -2162,10 +2178,12 @@
                     quality != null ? `Q: ${Number(quality).toFixed(2)}` : ''
                 ].filter(Boolean).join(' · ');
                 const offerOnly = Boolean(entry.offerOnly || price <= 0);
+                const currency = String(entry.currency || 'GOLD').toUpperCase();
+                const currencyIcon = currency === 'DIAMONDS' ? '💎' : '💲';
                 row.innerHTML = `
                     <div><b>${escapeHTML(name)}</b>${details ? `<small style="display:block;color:#90cdf4;margin-top:2px;">${escapeHTML(details)}</small>` : ''}${statText ? `<small style="display:block;color:#a0aec0;margin-top:2px;">${escapeHTML(statText)}</small>` : ''}</div>
                     <span style="color:#a0aec0;">${tr('quantity')}: <b style="color:#e2e8f0;">${quantity.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}</b></span>
-                    <b style="color:#f6c453;">${offerOnly ? tr('offerOnly') : `💲 ${price.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}`}</b>`;
+                    <b style="color:#f6c453;">${offerOnly ? tr('offerOnly') : `${currencyIcon} ${price.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}`}</b>`;
                 const buyButton = document.createElement('button');
                 buyButton.type = 'button';
                 buyButton.className = 'mk-bulk-btn market-buy';
@@ -2175,27 +2193,34 @@
                     buyButton.disabled = true;
                     try {
                         const characterData = await gameApiRequest('/api/characters/me');
+                        const currentBalance = currency === 'DIAMONDS'
+                            ? Number(characterData.character?.diamonds || 0)
+                            : Number(characterData.character?.gold || 0);
                         const confirmed = await new Promise(resolve => showPurchaseConfirm({
                             name,
                             quantity: 1,
                             unitPrice: price,
-                            currentGold: Number(characterData.character?.gold || 0)
+                            currentBalance,
+                            currency
                         }, resolve));
                         if (!confirmed) {
                             buyButton.disabled = false;
                             return;
                         }
+                        const marketAction = entry.kind === 'pokemon'
+                            ? { action: 'buy', id: entry.id, quantity: 1 }
+                            : {
+                                action: 'buy-stack',
+                                kind: entry.kind,
+                                refId: entry.refId,
+                                price: entry.price,
+                                currency: entry.currency,
+                                quantity: 1,
+                                ids: entry.ids ?? [entry.id]
+                            };
                         await gameApiRequest('/api/game/market/action', {
                             method: 'POST',
-                            body: JSON.stringify({
-                                action: 'buy-stack',
-                                kind: entry.kind || (activeCategory === 'Pokemon' ? 'pokemon' : 'item'),
-                                refId: Number(entry.refId) || 0,
-                                price,
-                                currency: String(entry.currency || 'GOLD').toLowerCase(),
-                                quantity: 1,
-                                ids: Array.isArray(entry.ids) && entry.ids.length ? entry.ids : [entry.id]
-                            })
+                            body: JSON.stringify(marketAction)
                         });
                         if (quantity <= 1 || entry.kind === 'pokemon') {
                             currentListings = currentListings.filter(item => item !== entry);
