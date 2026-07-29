@@ -604,7 +604,8 @@
     function setDropMode(mode) { localStorage.setItem(STORAGE_DROP_MODE, mode); buildSimpleList(); }
 
     function getSellConfirmItems() {
-        return readStoredJSON(STORAGE_SELL_CONFIRM, ['Strange Pheromone', 'Rare Pokémon Picture']);
+        const items = readStoredJSON(STORAGE_SELL_CONFIRM, ['Strange Pheromone', 'Rare Pokémon Picture']);
+        return items.includes('Bronze Boss Token') ? items : [...items, 'Bronze Boss Token'];
     }
     function setSellConfirmItems(items) {
         localStorage.setItem(STORAGE_SELL_CONFIRM, JSON.stringify(items));
@@ -716,10 +717,10 @@
         const mapIsVisible = mapWindow && getComputedStyle(mapWindow).display !== 'none';
         if (!mapIsVisible) {
             if (mapBtn) mapBtn.click();
-            await new Promise(resolve => setTimeout(resolve, 500));
+            mapWindow = await waitForElement('.map-window', 1200);
         }
 
-        mapWindow = document.querySelector('.map-window');
+        mapWindow = mapWindow || document.querySelector('.map-window');
         if (!mapWindow) {
             alert('Mapa não abriu.');
             return;
@@ -752,6 +753,25 @@
         }
 
         alert(`Hunt "${huntName}" não foi localizada em nenhuma área.`);
+    }
+
+    function waitForElement(selector, timeoutMs) {
+        const existing = document.querySelector(selector);
+        if (existing) return Promise.resolve(existing);
+        return new Promise(resolve => {
+            const observer = new MutationObserver(() => {
+                const element = document.querySelector(selector);
+                if (!element) return;
+                observer.disconnect();
+                clearTimeout(timeout);
+                resolve(element);
+            });
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+            const timeout = setTimeout(() => {
+                observer.disconnect();
+                resolve(null);
+            }, timeoutMs);
+        });
     }
 
     function tryFindMarkerAsync(huntName, maxAttempts, intervalMs) {
@@ -1525,6 +1545,52 @@
         });
     }
 
+    function showPurchaseConfirm({ name, quantity, unitPrice, currentGold }, callback) {
+        const total = quantity * unitPrice;
+        const backdrop = document.createElement('div');
+        backdrop.className = 'sell-confirm-backdrop';
+        backdrop.innerHTML = `
+            <div class="sell-confirm-modal">
+                <div class="sell-confirm-title">🛒 Confirmar compra</div>
+                <div class="sell-confirm-body">
+                    <p><b>${quantity.toLocaleString('pt-BR')}× ${escapeHTML(name)}</b></p>
+                    <div class="sell-confirm-items">
+                        <div>Preço unitário: 💲${unitPrice.toLocaleString('pt-BR')}</div>
+                        <div>Total: 💲${total.toLocaleString('pt-BR')}</div>
+                        <div>Saldo após compra: 💲${Math.max(0, currentGold - total).toLocaleString('pt-BR')}</div>
+                    </div>
+                    <div class="sell-confirm-footer">
+                        <button class="sell-confirm-btn yes" type="button" ${total > currentGold ? 'disabled' : ''}>Confirmar</button>
+                        <button class="sell-confirm-btn no" type="button">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
+        backdrop.querySelector('.yes').addEventListener('click', () => {
+            backdrop.remove();
+            callback(true);
+        });
+        backdrop.querySelector('.no').addEventListener('click', () => {
+            backdrop.remove();
+            callback(false);
+        });
+    }
+
+    function showWindowMessage(windowElement, message, isError = false) {
+        let messageElement = windowElement.querySelector('.script-window-message');
+        if (!messageElement) {
+            messageElement = document.createElement('div');
+            messageElement.className = 'script-window-message';
+            messageElement.style.cssText = 'padding:7px 12px;text-align:center;font-size:12px;font-weight:bold;';
+            windowElement.appendChild(messageElement);
+        }
+        messageElement.style.color = isError ? '#f56565' : '#48bb78';
+        messageElement.textContent = message;
+        clearTimeout(messageElement._hideTimer);
+        messageElement._hideTimer = setTimeout(() => messageElement.remove(), 3500);
+    }
+
     async function showHuntSellWindow() {
         document.querySelector('.hunt-sell-backdrop')?.remove();
 
@@ -1761,7 +1827,8 @@
                     poke.locked ? '🔒' : '',
                     (poke.market || poke.listed) ? '🏷️' : ''
                 ].filter(Boolean).join(' ');
-                name.textContent = `${poke.name || `Pokémon ${poke.speciesId}`} · Lv.${poke.level || 1} · IV ${poke.ivTotal ?? '—'} ${flags}`;
+                const quality = Number.isFinite(Number(poke.quality)) ? Number(poke.quality).toFixed(2) : '—';
+                name.textContent = `${poke.name || `Pokémon ${poke.speciesId}`} · IV ${poke.ivTotal ?? '—'} · Qualidade ${quality} ${flags}`;
 
                 const value = document.createElement('strong');
                 value.textContent = `💲${Number(poke.sellValue).toLocaleString('pt-BR')}`;
@@ -1843,14 +1910,18 @@
                 button.className = 'ball-buy';
                 button.textContent = `+${quantity.toLocaleString('pt-BR')}`;
                 button.addEventListener('click', async () => {
-                    const confirmed = confirm(`Comprar ${quantity.toLocaleString('pt-BR')}× ${ballName}?`);
-                    if (!confirmed) return;
-
                     button.disabled = true;
                     try {
                         const data = await loadBallCatalog();
                         const ball = data.catalog?.find(item => item.name === ballName);
                         if (!ball?.id) throw new Error('Poké Bola não encontrada no catálogo.');
+                        const confirmed = await new Promise(resolve => showPurchaseConfirm({
+                            name: ballName,
+                            quantity,
+                            unitPrice: Number(ball.priceGold) || 0,
+                            currentGold: Number(data.gold) || 0
+                        }, resolve));
+                        if (!confirmed) return;
                         const result = await gameApiRequest('/api/game/balls/buy', {
                             method: 'POST',
                             body: JSON.stringify({ ballId: ball.id, qty: quantity })
@@ -1860,9 +1931,11 @@
                         if (owned && count !== undefined) owned.textContent = `${Number(count).toLocaleString('pt-BR')}× em estoque`;
                         const gold = ballWindow.querySelector('.ball-gold');
                         if (gold && result.gold !== undefined) gold.textContent = `💲 ${Number(result.gold).toLocaleString('pt-BR')}`;
+                        ballCatalogPromise = null;
+                        showWindowMessage(ballWindow, `Compra concluída: ${quantity.toLocaleString('pt-BR')}× ${ballName}`);
                     } catch (error) {
                         console.error('Falha ao comprar Poké Bolas:', error);
-                        alert(`Não foi possível concluir a compra: ${error.message}`);
+                        showWindowMessage(ballWindow, `Não foi possível concluir a compra: ${error.message}`, true);
                     } finally {
                         button.disabled = false;
                     }
@@ -1873,12 +1946,132 @@
         });
     }
 
+    let markCatalogPromise = null;
+
+    function loadMarkCatalog() {
+        if (!markCatalogPromise) {
+            markCatalogPromise = gameApiRequest('/api/game/shop').catch(error => {
+                markCatalogPromise = null;
+                throw error;
+            });
+        }
+        return markCatalogPromise;
+    }
+
+    function injectMarkBuyQuantities(mkWindow) {
+        const quantityBar = mkWindow.querySelector('.mk-qtybar');
+        const quantityInput = quantityBar?.querySelector('input.mk-qty');
+        if (!quantityBar || !quantityInput || quantityBar.querySelector('.script-mark-qty-presets')) return;
+
+        const presets = document.createElement('span');
+        presets.className = 'script-mark-qty-presets';
+        presets.style.cssText = 'display:inline-flex;gap:4px;flex-wrap:wrap;';
+        [1, 10, 100, 1000, 10000].forEach(quantity => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'mk-bulk-btn';
+            button.textContent = quantity.toLocaleString('pt-BR');
+            button.addEventListener('click', () => {
+                mkWindow.dataset.scriptBuyQty = String(quantity);
+                quantityInput.value = String(quantity);
+                presets.querySelectorAll('button').forEach(item => item.classList.toggle('on', item === button));
+            });
+            presets.appendChild(button);
+        });
+        quantityInput.addEventListener('input', () => delete mkWindow.dataset.scriptBuyQty);
+        quantityBar.appendChild(presets);
+
+        if (!mkWindow.dataset.scriptBuyIntercepted) {
+            mkWindow.addEventListener('click', async event => {
+                const buyButton = event.target.closest('button.mk-buy');
+                const quantity = parseInt(mkWindow.dataset.scriptBuyQty, 10);
+                if (!buyButton || !quantity) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+
+                const row = buyButton.closest('.mk-row');
+                const name = row?.querySelector('.mk-name')?.textContent?.trim();
+                if (!name) return;
+                buyButton.disabled = true;
+                try {
+                    const catalog = await loadMarkCatalog();
+                    const ball = catalog.balls?.find(item => item.name === name);
+                    const item = catalog.items?.find(entry => entry.name === name);
+                    const product = ball || item;
+                    if (!product) throw new Error('Produto não encontrado.');
+                    const confirmed = await new Promise(resolve => showPurchaseConfirm({
+                        name,
+                        quantity,
+                        unitPrice: Number(product.priceGold) || 0,
+                        currentGold: Number(catalog.gold) || 0
+                    }, resolve));
+                    if (!confirmed) return;
+                    const payload = ball ? { ballId: product.id, qty: quantity } : { itemId: product.id, qty: quantity };
+                    const result = await gameApiRequest('/api/game/shop/buy', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    const gold = mkWindow.querySelector('.mk-gold');
+                    if (gold && result.gold !== undefined) gold.textContent = `💲 ${Number(result.gold).toLocaleString('pt-BR')}`;
+                    markCatalogPromise = null;
+                    showWindowMessage(mkWindow, `Compra concluída: ${quantity.toLocaleString('pt-BR')}× ${name}`);
+                } catch (error) {
+                    showWindowMessage(mkWindow, `Não foi possível concluir a compra: ${error.message}`, true);
+                } finally {
+                    buyButton.disabled = false;
+                }
+            }, true);
+            mkWindow.dataset.scriptBuyIntercepted = 'true';
+        }
+    }
+
+    async function injectMarkOwnedQuantities(mkWindow) {
+        const buyTab = Array.from(mkWindow.querySelectorAll('.mk-tab'))
+            .some(tab => tab.classList.contains('on') && /Comprar|Buy/i.test(tab.textContent));
+        if (!buyTab || !mkWindow.querySelector('.mk-row')) return;
+
+        try {
+            const [inventory, ballsData, shopData] = await Promise.all([
+                requestGameEvent('inventory', 'inv-get', latestInventory),
+                loadBallCatalog(),
+                loadMarkCatalog()
+            ]);
+            const itemCounts = new Map(inventory.map(entry => [String(entry.itemId), Number(entry.quantity) || 0]));
+
+            mkWindow.querySelectorAll('.mk-row').forEach(row => {
+                const name = row.querySelector('.mk-name')?.textContent?.trim();
+                const info = row.querySelector('.mk-info');
+                if (!name || !info) return;
+                const ball = shopData.balls?.find(item => item.name === name);
+                const item = shopData.items?.find(entry => entry.name === name);
+                const quantity = ball
+                    ? Number(ballsData.counts?.[String(ball.id)] || 0)
+                    : Number(itemCounts.get(String(item?.id)) || 0);
+
+                let owned = info.querySelector('.script-owned-qty');
+                if (!owned) {
+                    owned = document.createElement('div');
+                    owned.className = 'mk-meta script-owned-qty';
+                    info.appendChild(owned);
+                }
+                const quantityText = `${quantity.toLocaleString('pt-BR')}× em estoque`;
+                if (owned.textContent !== quantityText) owned.textContent = quantityText;
+            });
+        } catch (error) {
+            console.warn('Falha ao carregar quantidades do Mark:', error);
+        }
+    }
+
     function injectShopEnhancements() {
         const mkWindow = document.querySelector('.mk-window');
         if (!mkWindow) return;
+
+        injectMarkBuyQuantities(mkWindow);
+        injectMarkOwnedQuantities(mkWindow);
         
         // 1. Sell Tab: Locks & Intercept Sell
-        const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Sell'));
+        const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab'))
+            .find(t => t.classList.contains('on') && /\b(?:Sell|Vender)\b/i.test(t.textContent));
         if (isSellTab) {
             const locks = getSellLocks();
             const guardActive = isGuardSellLockActive();
