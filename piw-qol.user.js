@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.61
+// @version      9.9.62
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -155,7 +155,11 @@
             search: 'Buscar...', loading: 'Carregando anúncios…', noListings: 'Nenhum anúncio encontrado.',
             showing: 'Exibindo', of: 'de', loadMore: 'Carregar mais',
             inStock: 'em estoque',
-            buy: 'Comprar', offerOnly: 'Somente oferta', ivTotal: 'IV total',
+            buy: 'Comprar', offerOnly: 'Oferta', ivTotal: 'IV total', showOffers: 'Mostrar ofertas',
+            all: 'Todos', stones: 'Stones', pokeBalls: 'Poké Balls', diamonds: 'Diamonds',
+            recent: 'Mais recentes', lowestPrice: 'Menor preço', highestPrice: 'Maior preço',
+            highestIv: 'Maior IV', highestPower: 'Maior poder', highestLevel: 'Maior nível', highestQuality: 'Maior qualidade',
+            shinyOnly: 'Somente shiny', minIv: 'IV mín.', maxIv: 'IV máx.', minLevel: 'Nível mín.', maxLevel: 'Nível máx.', minQuality: 'Qual. mín.', maxQuality: 'Qual. máx.', allTypes: 'Todos os tipos',
             purchaseDone: 'Compra concluída.', purchaseFailed: 'Não foi possível concluir a compra.',
             loadFailed: 'Não foi possível carregar o mercado.', seller: 'Vendedor', quantity: 'Quantidade',
             price: 'Preço', selectItems: 'Selecionar itens ▾', protectedItems: 'Itens protegidos. Busque ao lado para adicionar.',
@@ -184,7 +188,11 @@
             search: 'Search...', loading: 'Loading listings…', noListings: 'No listings found.',
             showing: 'Showing', of: 'of', loadMore: 'Load more',
             inStock: 'in stock',
-            buy: 'Buy', offerOnly: 'Offer only', ivTotal: 'Total IV',
+            buy: 'Buy', offerOnly: 'Offer', ivTotal: 'Total IV', showOffers: 'Show offers',
+            all: 'All', stones: 'Stones', pokeBalls: 'Poké Balls', diamonds: 'Diamonds',
+            recent: 'Most recent', lowestPrice: 'Lowest price', highestPrice: 'Highest price',
+            highestIv: 'Highest IV', highestPower: 'Highest power', highestLevel: 'Highest level', highestQuality: 'Highest quality',
+            shinyOnly: 'Shiny only', minIv: 'Min IV', maxIv: 'Max IV', minLevel: 'Min level', maxLevel: 'Max level', minQuality: 'Min quality', maxQuality: 'Max quality', allTypes: 'All types',
             purchaseDone: 'Purchase completed.', purchaseFailed: 'Could not complete the purchase.',
             loadFailed: 'Could not load the market.', seller: 'Seller', quantity: 'Quantity',
             price: 'Price', selectItems: 'Select items ▾', protectedItems: 'Protected items. Search to add more.',
@@ -834,7 +842,7 @@
     async function teleportToTarget(huntName) {
         hideDropTooltip();
         if (!huntName) {
-            alert('Nenhuma hunt definida!');
+            showScriptNotice('Nenhuma hunt definida.');
             return;
         }
 
@@ -851,7 +859,7 @@
 
         mapWindow = mapWindow || document.querySelector('.map-window');
         if (!mapWindow) {
-            alert('Mapa não abriu.');
+            showScriptNotice('O mapa não abriu.', { isError: true });
             return;
         }
 
@@ -863,7 +871,7 @@
         let allTabs = Array.from(mapWindow.querySelectorAll('.map-area:not(.locked)'));
         if (allTabs.length === 0) {
             const found = await tryFindMarkerAsync(huntName, 20, 100);
-            if (!found) alert(`Hunt "${huntName}" não foi localizada.`);
+            if (!found) showScriptNotice(`Hunt "${huntName}" não foi localizada.`, { isError: true });
             return;
         }
 
@@ -881,7 +889,7 @@
             if (found) return;
         }
 
-        alert(`Hunt "${huntName}" não foi localizada em nenhuma área.`);
+        showScriptNotice(`Hunt "${huntName}" não foi localizada em nenhuma área.`, { isError: true });
     }
 
     function waitForElement(selector, timeoutMs) {
@@ -936,13 +944,13 @@
 
     function teleportToFavorite() {
         const favs = getFavorites();
-        if (favs.length === 0) return alert('Você não possui nenhuma hunt favorita!');
+        if (favs.length === 0) return showScriptNotice('Você não possui nenhuma hunt favorita.');
         teleportToTarget(favs[0]);
     }
 
     function teleportToLastHunt() {
         const last = getLastHunt();
-        if (!last) return alert('Nenhuma última hunt registrada ainda.');
+        if (!last) return showScriptNotice('Nenhuma última hunt registrada ainda.');
         teleportToTarget(last);
     }
 
@@ -1797,6 +1805,55 @@
         });
     }
 
+    function showScriptNotice(message, { title = 'Aviso', isError = false } = {}) {
+        return new Promise(resolve => {
+            const backdrop = document.createElement('div');
+            backdrop.className = 'sell-confirm-backdrop script-notice-backdrop';
+            backdrop.innerHTML = `
+                <div class="sell-confirm-modal" style="width:min(420px,92vw);">
+                    <div class="sell-confirm-title">${isError ? '⚠️' : 'ℹ️'} ${escapeHTML(title)}</div>
+                    <div class="sell-confirm-body">
+                        <p style="margin:0 0 14px;color:${isError ? '#feb2b2' : '#e2e8f0'};">${escapeHTML(message)}</p>
+                        <div class="sell-confirm-footer">
+                            <button class="sell-confirm-btn yes script-notice-ok" type="button">OK</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(backdrop);
+            backdrop.querySelector('.script-notice-ok').addEventListener('click', () => {
+                backdrop.remove();
+                resolve();
+            });
+        });
+    }
+
+    function showScriptConfirm(message, { title = 'Confirmar', confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' } = {}) {
+        return new Promise(resolve => {
+            const backdrop = document.createElement('div');
+            backdrop.className = 'sell-confirm-backdrop script-confirm-backdrop';
+            backdrop.innerHTML = `
+                <div class="sell-confirm-modal" style="width:min(440px,92vw);">
+                    <div class="sell-confirm-title">❔ ${escapeHTML(title)}</div>
+                    <div class="sell-confirm-body">
+                        <p style="margin:0 0 14px;color:#e2e8f0;">${escapeHTML(message)}</p>
+                        <div class="sell-confirm-footer">
+                            <button class="sell-confirm-btn yes script-confirm-yes" type="button">${escapeHTML(confirmLabel)}</button>
+                            <button class="sell-confirm-btn no script-confirm-no" type="button">${escapeHTML(cancelLabel)}</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(backdrop);
+            backdrop.querySelector('.script-confirm-yes').addEventListener('click', () => {
+                backdrop.remove();
+                resolve(true);
+            });
+            backdrop.querySelector('.script-confirm-no').addEventListener('click', () => {
+                backdrop.remove();
+                resolve(false);
+            });
+        });
+    }
+
     function showWindowMessage(windowElement, message, isError = false) {
         let messageElement = windowElement.querySelector('.script-window-message');
         if (!messageElement) {
@@ -1965,8 +2022,8 @@
                     try {
                         const result = await sellItemsThroughShop(selectedRows.map(({ itemId, qty }) => ({ itemId, qty })));
                         latestInventory = null;
-                        alert(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`);
                         close();
+                        showScriptNotice(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`, { title: 'Venda concluída' });
                     } catch (error) {
                         console.error('Falha ao vender itens no Mark:', error);
                         status.textContent = 'Não foi possível concluir a venda. Tente novamente.';
@@ -2080,8 +2137,8 @@
             submit.addEventListener('click', async () => {
                 const pokeIds = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'))
                     .map(checkbox => checkbox.dataset.pokeId);
-                if (!pokeIds.length) return alert('Selecione pelo menos um Pokémon.');
-                if (!confirm(`Vender ${pokeIds.length} Pokémon selecionado(s)?`)) return;
+                if (!pokeIds.length) return showScriptNotice('Selecione pelo menos um Pokémon.');
+                if (!await showScriptConfirm(`Vender ${pokeIds.length} Pokémon selecionado(s)?`, { title: 'Confirmar venda', confirmLabel: 'Vender' })) return;
                 submit.disabled = true;
                 try {
                     const result = await gameApiRequest('/api/game/pokemon/sell', {
@@ -2089,11 +2146,11 @@
                         body: JSON.stringify({ pokeIds })
                     });
                     latestPokemon = null;
-                    alert(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`);
                     close();
+                    showScriptNotice(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`, { title: 'Venda concluída' });
                     sendGameMessage({ type: 'pokes-get' });
                 } catch (error) {
-                    alert(`Não foi possível concluir a venda: ${error.message}`);
+                    showScriptNotice(`Não foi possível concluir a venda: ${error.message}`, { title: 'Erro na venda', isError: true });
                     submit.disabled = false;
                 }
             });
@@ -2127,10 +2184,36 @@
                     <button class="mk-bulk-btn market-refresh" type="button">↻ ${tr('refresh')}</button>
                     <button class="cfg-x market-close" type="button" aria-label="Close">×</button>
                 </div>
-                <div style="display:flex;gap:6px;padding:10px 12px 0;">
-                    <button class="mk-bulk-btn market-tab on" data-category="Items" type="button">${tr('items')}</button>
-                    <button class="mk-bulk-btn market-tab" data-category="Pokemon" type="button">${tr('pokemon')}</button>
-                    <input class="market-search" type="search" placeholder="${tr('search')}" style="margin-left:auto;min-width:220px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
+                <div style="display:flex;gap:6px;padding:10px 12px 0;flex-wrap:wrap;">
+                    <select class="market-category" style="background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
+                        <option value="All">${tr('all')}</option>
+                        <option value="Items" selected>${tr('items')}</option>
+                        <option value="Stones">${tr('stones')}</option>
+                        <option value="Poke Balls">${tr('pokeBalls')}</option>
+                        <option value="Diamonds">${tr('diamonds')}</option>
+                        <option value="Pokemon">${tr('pokemon')}</option>
+                    </select>
+                    <select class="market-sort" style="background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
+                        <option value="recent">${tr('recent')}</option>
+                        <option value="price-asc">${tr('lowestPrice')}</option>
+                        <option value="price-desc">${tr('highestPrice')}</option>
+                        <option value="iv-desc">${tr('highestIv')}</option>
+                        <option value="power-desc">${tr('highestPower')}</option>
+                        <option value="level-desc">${tr('highestLevel')}</option>
+                        <option value="quality-desc">${tr('highestQuality')}</option>
+                    </select>
+                    <input class="market-search" type="search" placeholder="${tr('search')}" style="flex:1;min-width:180px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
+                    <label style="display:flex;align-items:center;gap:5px;color:#a0aec0;font-size:12px;"><input class="market-show-offers" type="checkbox" checked> ${tr('showOffers')}</label>
+                </div>
+                <div class="market-pokemon-filters" style="display:none;gap:6px;padding:7px 12px 0;flex-wrap:wrap;">
+                    <label style="display:flex;align-items:center;gap:5px;color:#a0aec0;font-size:12px;"><input class="market-shiny-only" type="checkbox"> ${tr('shinyOnly')}</label>
+                    <input class="market-iv-min" type="number" min="0" max="192" placeholder="${tr('minIv')}" style="width:72px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                    <input class="market-iv-max" type="number" min="0" max="192" placeholder="${tr('maxIv')}" style="width:72px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                    <input class="market-level-min" type="number" min="1" placeholder="${tr('minLevel')}" style="width:82px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                    <input class="market-level-max" type="number" min="1" placeholder="${tr('maxLevel')}" style="width:82px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                    <input class="market-quality-min" type="number" min="0" step="0.01" placeholder="${tr('minQuality')}" style="width:88px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                    <input class="market-quality-max" type="number" min="0" step="0.01" placeholder="${tr('maxQuality')}" style="width:88px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                    <select class="market-type" style="min-width:130px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;"><option value="">${tr('allTypes')}</option></select>
                 </div>
                 <div class="market-status" style="padding:7px 12px;color:#a0aec0;font-size:12px;"></div>
                 <div class="market-list" style="padding:0 12px 12px;overflow:auto;display:grid;gap:7px;"></div>
@@ -2143,19 +2226,56 @@
         const list = backdrop.querySelector('.market-list');
         const status = backdrop.querySelector('.market-status');
         const search = backdrop.querySelector('.market-search');
+        const categorySelect = backdrop.querySelector('.market-category');
+        const sortSelect = backdrop.querySelector('.market-sort');
+        const showOffers = backdrop.querySelector('.market-show-offers');
+        const pokemonFilters = backdrop.querySelector('.market-pokemon-filters');
+        const shinyOnly = backdrop.querySelector('.market-shiny-only');
+        const ivMin = backdrop.querySelector('.market-iv-min');
+        const ivMax = backdrop.querySelector('.market-iv-max');
+        const levelMin = backdrop.querySelector('.market-level-min');
+        const levelMax = backdrop.querySelector('.market-level-max');
+        const qualityMin = backdrop.querySelector('.market-quality-min');
+        const qualityMax = backdrop.querySelector('.market-quality-max');
+        const typeSelect = backdrop.querySelector('.market-type');
         const close = () => backdrop.remove();
 
         const render = () => {
             const query = search.value.trim().toLocaleLowerCase();
-            const filtered = currentListings.filter(entry => {
+            let filtered = currentListings.filter(entry => {
                 const ref = entry.item || entry.pokemon || entry.product || {};
                 const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '';
-                return !query || String(name).toLocaleLowerCase().includes(query);
+                if (query && !String(name).toLocaleLowerCase().includes(query)) return false;
+                if (!showOffers.checked && (entry.offerOnly || Number(entry.price) <= 0)) return false;
+                if (activeCategory === 'Pokemon') {
+                    const iv = Number(entry.ivTotal ?? -1);
+                    const level = Number(entry.level ?? -1);
+                    const quality = Number(entry.quality ?? -1);
+                    if (shinyOnly.checked && !entry.shiny) return false;
+                    if (ivMin.value !== '' && iv < Number(ivMin.value)) return false;
+                    if (ivMax.value !== '' && iv > Number(ivMax.value)) return false;
+                    if (levelMin.value !== '' && level < Number(levelMin.value)) return false;
+                    if (levelMax.value !== '' && level > Number(levelMax.value)) return false;
+                    if (qualityMin.value !== '' && quality < Number(qualityMin.value)) return false;
+                    if (qualityMax.value !== '' && quality > Number(qualityMax.value)) return false;
+                    if (typeSelect.value && entry.type1 !== typeSelect.value && entry.type2 !== typeSelect.value) return false;
+                }
+                return true;
             });
+            const sorters = {
+                'price-asc': (a, b) => Number(a.price) - Number(b.price),
+                'price-desc': (a, b) => Number(b.price) - Number(a.price),
+                'iv-desc': (a, b) => Number(b.ivTotal ?? -1) - Number(a.ivTotal ?? -1),
+                'power-desc': (a, b) => Number(b.power ?? -1) - Number(a.power ?? -1),
+                'level-desc': (a, b) => Number(b.level ?? -1) - Number(a.level ?? -1),
+                'quality-desc': (a, b) => Number(b.quality ?? -1) - Number(a.quality ?? -1)
+            };
+            if (sorters[sortSelect.value]) filtered = [...filtered].sort(sorters[sortSelect.value]);
             const visible = filtered.slice(0, renderLimit);
             list.innerHTML = '';
+            const categoryLabel = categorySelect.options[categorySelect.selectedIndex]?.text || activeCategory;
             status.textContent = filtered.length
-                ? `${tr('showing')} ${visible.length.toLocaleString()} ${tr('of')} ${filtered.length.toLocaleString()} ${activeCategory === 'Items' ? tr('items') : tr('pokemon')}`
+                ? `${tr('showing')} ${visible.length.toLocaleString()} ${tr('of')} ${filtered.length.toLocaleString()} ${categoryLabel}`
                 : tr('noListings');
             visible.forEach(entry => {
                 const ref = entry.item || entry.pokemon || entry.product || {};
@@ -2257,6 +2377,9 @@
             try {
                 const payload = await gameApiRequest(`/api/game/market?category=${encodeURIComponent(activeCategory)}`);
                 currentListings = getMarketListings(payload);
+                const types = [...new Set(currentListings.flatMap(entry => [entry.type1, entry.type2]).filter(Boolean))].sort();
+                typeSelect.innerHTML = `<option value="">${tr('allTypes')}</option>${types.map(type => `<option value="${escapeHTML(type)}">${escapeHTML(type)}</option>`).join('')}`;
+                pokemonFilters.style.display = activeCategory === 'Pokemon' ? 'flex' : 'none';
                 renderLimit = 100;
                 render();
             } catch (error) {
@@ -2267,16 +2390,18 @@
         backdrop.querySelector('.market-close').addEventListener('click', close);
         backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
         backdrop.querySelector('.market-refresh').addEventListener('click', load);
-        backdrop.querySelectorAll('.market-tab').forEach(tab => tab.addEventListener('click', () => {
-            activeCategory = tab.dataset.category;
+        categorySelect.addEventListener('change', () => {
+            activeCategory = categorySelect.value;
             renderLimit = 100;
-            backdrop.querySelectorAll('.market-tab').forEach(button => button.classList.toggle('on', button === tab));
+            if (activeCategory !== 'Pokemon' && ['iv-desc', 'power-desc', 'level-desc', 'quality-desc'].includes(sortSelect.value)) {
+                sortSelect.value = 'recent';
+            }
             load();
-        }));
-        search.addEventListener('input', () => {
+        });
+        [search, sortSelect, showOffers, shinyOnly, ivMin, ivMax, levelMin, levelMax, qualityMin, qualityMax, typeSelect].forEach(control => control.addEventListener('input', () => {
             renderLimit = 100;
             render();
-        });
+        }));
         load();
     }
 
