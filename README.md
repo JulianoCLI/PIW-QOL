@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.9.63-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.0-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -111,6 +111,17 @@ Você pode ordenar as hunts por:
 - maior ganho de experiência.
 
 As hunts favoritas permanecem no começo da lista.
+
+O mapa também considera o nível do treinador:
+
+- hunts acessíveis funcionam normalmente;
+- hunts acima do seu nível ficam escurecidas, com cadeado e indicação do nível necessário;
+- clicar em uma hunt bloqueada mostra o motivo sem tentar teleportar;
+- os filtros de tipo usam somente hunts que seu personagem já pode acessar;
+- é possível exibir somente hunts acessíveis, favoritas acessíveis ou hunts com vantagem de tipo;
+- a pesquisa também encontra hunts pelo nome de seus drops.
+
+O último filtro e a última ordenação utilizados ficam salvos no navegador.
 
 ### Favoritos
 
@@ -264,6 +275,8 @@ Ao trocar de hunt, o script guarda os dados da sessão anterior. A comparação 
 
 Resultados melhores aparecem destacados em verde e resultados inferiores em vermelho.
 
+A troca de hunt é identificada pelo local, pelo tempo e pelos contadores da sessão, reduzindo perdas quando a troca acontece antes da primeira derrota. As últimas 20 sessões válidas ficam salvas no navegador, e as 10 mais recentes aparecem no comparador.
+
 ### Última captura
 
 O Hunt Analyzer também pode mostrar:
@@ -329,7 +342,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.9.63**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.0**.
 
 ## Solução de problemas
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.63
+// @version      9.10.0
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -98,8 +98,13 @@
     const STORAGE_HUNT_BULK_BUY = 'script_hunt_bulk_buy_v1';
     const STORAGE_HUNT_SELL = 'script_hunt_sell_v1';
     const STORAGE_MARK_ENHANCEMENTS = 'script_mark_enhancements_v1';
+    const STORAGE_MAP_FILTERS = 'script_map_filters_v1';
+    const STORAGE_HA_HISTORY = 'script_ha_history_v1';
 
     let isRendering = false;
+    let cachedTrainerLevel = null;
+    let trainerLevelPromise = null;
+    let lastMapRenderSignature = '';
     const globalCreatureApiData = new Map();
     const globalItemApiData = new Map();
     const globalHuntMarkerData = new Map();
@@ -211,6 +216,58 @@
             console.warn(`Falha ao ler a configuração "${key}". O valor padrão será usado.`, error);
             return fallback;
         }
+    }
+
+    function getMapFilters() {
+        const fallback = {
+            sort: 'price_desc',
+            type: '',
+            access: 'all'
+        };
+        try {
+            const parsed = JSON.parse(localStorage.getItem(STORAGE_MAP_FILTERS) || 'null');
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? { ...fallback, ...parsed }
+                : fallback;
+        } catch {
+            return fallback;
+        }
+    }
+
+    function setMapFilters(filters) {
+        localStorage.setItem(STORAGE_MAP_FILTERS, JSON.stringify(filters));
+    }
+
+    function readTrainerLevelFromDOM() {
+        const candidates = [
+            document.querySelector('.phud-tlevel'),
+            document.querySelector('.phud-level'),
+            document.querySelector('[data-guide="player-level"]')
+        ].filter(Boolean);
+        for (const element of candidates) {
+            const match = element.textContent.match(/\d+/);
+            if (match) return Number(match[0]);
+        }
+        return null;
+    }
+
+    function loadTrainerLevel() {
+        const domLevel = readTrainerLevelFromDOM();
+        if (domLevel) cachedTrainerLevel = domLevel;
+        if (cachedTrainerLevel !== null || trainerLevelPromise) {
+            return trainerLevelPromise || Promise.resolve(cachedTrainerLevel);
+        }
+        trainerLevelPromise = gameApiRequest('/api/characters/me')
+            .then(payload => {
+                cachedTrainerLevel = Number(payload?.character?.level ?? payload?.level) || readTrainerLevelFromDOM() || 1;
+                return cachedTrainerLevel;
+            })
+            .catch(() => {
+                cachedTrainerLevel = readTrainerLevelFromDOM() || 1;
+                return cachedTrainerLevel;
+            })
+            .finally(() => { trainerLevelPromise = null; });
+        return trainerLevelPromise;
     }
 
     function parseGameNumber(value) {
@@ -545,7 +602,7 @@
     style.id = 'simplifier-dynamic-styles';
     style.innerHTML = `
         .promo-overlay { display: none !important; }
-        #dock-btn-quick-tp, #dock-btn-shops {
+        #dock-btn-quick-tp, #dock-btn-shops, #dock-btn-depot {
             background: transparent;
             border: 0;
             box-shadow: none;
@@ -553,7 +610,11 @@
         }
         #dock-btn-quick-tp { color: #ffcc00; font-size: 16px; font-weight: bold; }
         #dock-btn-shops { color: #9ae6b4; font-size: 15px; }
+        #dock-btn-depot { color: #90cdf4; font-size: 15px; }
         .script-shop-wrap .poke-menu[hidden] { display: none !important; }
+        @media (max-width: 720px) {
+            #custom-hunts-filter-bar { grid-template-columns: 1fr !important; }
+        }
 
         .win-window, .cfg-window, .mk-window, .ball-window, .ha-window, .inv-window, .dex-window,
         .dep-window, .prof-window, .breed-window, .poke-window, .sell-confirm-modal,
@@ -1399,23 +1460,44 @@
 
             let customFilterBar = document.getElementById('custom-hunts-filter-bar');
             if (!customFilterBar) {
+                const savedFilters = getMapFilters();
                 customFilterBar = document.createElement('div');
                 customFilterBar.id = 'custom-hunts-filter-bar';
                 customFilterBar.style = `
-                    display: flex; gap: 8px; margin-top: 8px; margin-bottom: 4px; font-size: 13px;
+                    display: grid; grid-template-columns: minmax(180px,1.5fr) minmax(120px,1fr) minmax(150px,1fr);
+                    gap: 8px; margin-top: 8px; margin-bottom: 4px; font-size: 13px;
                 `;
                 
-                                customFilterBar.innerHTML = `
-                    <select id="sort-hunts-select" style="background:#0c161f; color:#cbd5e0; border:1px solid #1a2d3a; padding:6px 10px; border-radius:6px; outline:none; flex-grow:1; box-shadow: inset 0 1px 2px rgba(0,0,0,0.3); font-family: inherit; cursor: pointer;">
+                customFilterBar.innerHTML = `
+                    <select id="sort-hunts-select" title="Ordenar hunts" style="background:#0c161f;color:#cbd5e0;border:1px solid #1a2d3a;padding:6px 10px;border-radius:6px;outline:none;font-family:inherit;cursor:pointer;">
                         <option value="price_desc">Preço: Maior -> Menor</option>
                         <option value="price_asc">Preço: Menor -> Maior</option>
                         <option value="eff_desc">Efetividade: Maior Vantagem</option>
                         <option value="xp_desc">Somente XP: Maior XP</option>
                     </select>
+                    <select id="filter-hunts-type" title="Filtrar por tipo" style="background:#0c161f;color:#cbd5e0;border:1px solid #1a2d3a;padding:6px 10px;border-radius:6px;outline:none;font-family:inherit;cursor:pointer;">
+                        <option value="">Todos os tipos</option>
+                    </select>
+                    <select id="filter-hunts-access" title="Filtrar por nível" style="background:#0c161f;color:#cbd5e0;border:1px solid #1a2d3a;padding:6px 10px;border-radius:6px;outline:none;font-family:inherit;cursor:pointer;">
+                        <option value="all">Todas as hunts</option>
+                        <option value="accessible">Somente acessíveis</option>
+                        <option value="favorites">Favoritas acessíveis</option>
+                        <option value="advantage">Com vantagem de tipo</option>
+                    </select>
                 `;
                 mapBody.appendChild(customFilterBar);
 
-                document.getElementById('sort-hunts-select').addEventListener('change', () => { isRendering = false; buildSimpleList(); });
+                const sortSelect = customFilterBar.querySelector('#sort-hunts-select');
+                const typeSelect = customFilterBar.querySelector('#filter-hunts-type');
+                const accessSelect = customFilterBar.querySelector('#filter-hunts-access');
+                sortSelect.value = savedFilters.sort || 'price_desc';
+                accessSelect.value = savedFilters.access || 'all';
+                customFilterBar.addEventListener('change', () => {
+                    setMapFilters({ sort: sortSelect.value, type: typeSelect.value, access: accessSelect.value });
+                    lastMapRenderSignature = '';
+                    isRendering = false;
+                    buildSimpleList();
+                });
             }
 
             let simpleContainer = document.getElementById('simple-hunts-container');
@@ -1430,7 +1512,6 @@
                 mapBody.appendChild(simpleContainer);
             }
 
-            simpleContainer.innerHTML = '';
             if (mapWindow.classList.contains('invisible-check')) { isRendering = false; return; }
 
             const searchInput = document.querySelector('.map-filter-q');
@@ -1440,6 +1521,19 @@
             const favorites = getFavorites();
             const activePkmn = getActivePokemonName();
             const activePkmnTypes = POKEMON_TYPES[activePkmn] || ["normal"];
+            const domTrainerLevel = readTrainerLevelFromDOM();
+            if (cachedTrainerLevel === null && domTrainerLevel === null) {
+                simpleContainer.innerHTML = '<div style="color:#718096;text-align:center;padding:20px;">Carregando nível do treinador…</div>';
+                loadTrainerLevel().then(() => {
+                    lastMapRenderSignature = '';
+                    buildSimpleList();
+                });
+                return;
+            }
+            if (domTrainerLevel) cachedTrainerLevel = domTrainerLevel;
+            const trainerLevel = cachedTrainerLevel || domTrainerLevel;
+            const accessibleOption = document.querySelector('#filter-hunts-access option[value="accessible"]');
+            if (accessibleOption) accessibleOption.textContent = `Somente acessíveis (seu nível: ${trainerLevel})`;
 
             let huntDataList = [];
 
@@ -1453,6 +1547,8 @@
 
                 const name = nameEl ? nameEl.textContent.trim() : 'Sem Nome';
                 const lvlText = lvlEl ? lvlEl.textContent.trim() : 'Nv 1';
+                const requiredLevel = parseInt(lvlText.replace(/\D/g, ''), 10) || 1;
+                const canAccess = trainerLevel >= requiredLevel;
                 const isHere = marker.classList.contains('here');
 
                 if (isHere) saveLastHunt(name);
@@ -1463,7 +1559,7 @@
                 const xpEfficiency = (details.experience && effectiveness) ? details.experience / effectiveness : Infinity;
 
                 huntDataList.push({
-                    name, lvlText, isHere,
+                    name, lvlText, requiredLevel, canAccess, isHere,
                     sellsFor: details.sellsFor,
                     numericPrice: details.numericPrice,
                     dropsHTML: details.dropsHTML,
@@ -1478,10 +1574,37 @@
             });
 
             if (query) {
-                huntDataList = huntDataList.filter(hunt => hunt.name.toLowerCase().includes(query));
+                huntDataList = huntDataList.filter(hunt =>
+                    hunt.name.toLowerCase().includes(query) ||
+                    String(hunt.dropsHTML || '').replace(/<[^>]+>/g, ' ').toLowerCase().includes(query)
+                );
             }
 
-            const sortVal = document.getElementById('sort-hunts-select') ? document.getElementById('sort-hunts-select').value : 'price_desc';
+            const typeSelect = document.getElementById('filter-hunts-type');
+            const savedType = typeSelect?.value || getMapFilters().type || '';
+            const availableTypes = [...new Set(
+                huntDataList.filter(hunt => hunt.canAccess).flatMap(hunt => hunt.defenderTypes)
+            )].sort();
+            if (typeSelect) {
+                typeSelect.replaceChildren(new Option('Todos os tipos', ''));
+                availableTypes.forEach(type => typeSelect.add(new Option(type.toUpperCase(), type)));
+                typeSelect.value = availableTypes.includes(savedType) ? savedType : '';
+            }
+
+            const selectedType = typeSelect?.value || '';
+            const accessFilter = document.getElementById('filter-hunts-access')?.value || 'all';
+            if (selectedType) {
+                huntDataList = huntDataList.filter(hunt => hunt.canAccess && hunt.defenderTypes.includes(selectedType));
+            }
+            if (accessFilter === 'accessible') {
+                huntDataList = huntDataList.filter(hunt => hunt.canAccess);
+            } else if (accessFilter === 'favorites') {
+                huntDataList = huntDataList.filter(hunt => hunt.canAccess && favorites.includes(hunt.name));
+            } else if (accessFilter === 'advantage') {
+                huntDataList = huntDataList.filter(hunt => hunt.canAccess && hunt.effectiveness > 1);
+            }
+
+            const sortVal = document.getElementById('sort-hunts-select')?.value || 'price_desc';
             huntDataList.sort((a, b) => {
                 const aFav = favorites.includes(a.name);
                 const bFav = favorites.includes(b.name);
@@ -1503,6 +1626,17 @@
                 return a.name.localeCompare(b.name);
             });
 
+            const renderSignature = JSON.stringify({
+                query, sortVal, selectedType, accessFilter, trainerLevel, favorites,
+                rows: huntDataList.map(hunt => [
+                    hunt.name, hunt.lvlText, hunt.canAccess, hunt.isHere,
+                    hunt.numericPrice, hunt.experience, hunt.effectiveness
+                ])
+            });
+            if (renderSignature === lastMapRenderSignature && simpleContainer.childElementCount) return;
+            lastMapRenderSignature = renderSignature;
+            simpleContainer.innerHTML = '';
+
             if (huntDataList.length === 0) {
                 simpleContainer.innerHTML = `<div style="color: #718096; text-align: center; padding: 20px;">Nenhuma hunt encontrada.</div>`;
                 isRendering = false;
@@ -1517,9 +1651,11 @@
                 row.style = `
                     display: flex; align-items: center; justify-content: space-between;
                     padding: 10px 14px; margin-bottom: 8px;
-                    background: ${hunt.isHere ? '#163126' : '#14222d'};
-                    border-left: 4px solid ${hunt.isHere ? '#4caf50' : (isFav ? '#3182ce' : '#273f52')};
-                    border-radius: 4px; color: #e2e8f0; font-size: 14px; cursor: pointer; position: relative;
+                    background: ${!hunt.canAccess ? '#25191d' : (hunt.isHere ? '#163126' : '#14222d')};
+                    border-left: 4px solid ${!hunt.canAccess ? '#e05252' : (hunt.isHere ? '#4caf50' : (isFav ? '#3182ce' : '#273f52'))};
+                    border-radius: 4px; color: #e2e8f0; font-size: 14px;
+                    cursor: ${hunt.canAccess ? 'pointer' : 'not-allowed'}; position: relative;
+                    opacity: ${hunt.canAccess ? '1' : '.72'};
                 `;
 
                 const spriteContainer = document.createElement('div');
@@ -1565,6 +1701,7 @@
                         </span>
                         ${typeBadgesHTML}
                         ${hunt.isHere ? '<span style="font-size: 11px; color: #4caf50; font-weight: bold;">[Aqui]</span>' : ''}
+                        ${!hunt.canAccess ? `<span style="font-size:11px;color:#ff8b8b;background:#3b2026;border:1px solid #71313c;padding:2px 6px;border-radius:4px;">🔒 Requer nível ${hunt.requiredLevel}</span>` : ''}
                     </div>
                     ${bottomInfoHTML}
                 `;
@@ -1577,6 +1714,12 @@
                 row.addEventListener('click', (e) => {
                     if (e.target.closest('button')) return;
                     hideDropTooltip();
+                    if (!hunt.canAccess) {
+                        showScriptNotice(`Esta hunt exige nível ${hunt.requiredLevel}. Seu nível atual é ${trainerLevel}.`, {
+                            title: 'Hunt bloqueada'
+                        });
+                        return;
+                    }
                     saveLastHunt(hunt.name);
                     teleportToTarget(hunt.name);
                 });
@@ -3208,6 +3351,33 @@
     let capturesCount = 0;
     let lastHuntStartTime = null;
     let currentHuntStartTime = Date.now();
+    let huntHistory = readStoredJSON(STORAGE_HA_HISTORY, []);
+    if (!Array.isArray(huntHistory)) huntHistory = [];
+
+    function parseHuntDuration(text) {
+        const value = String(text || '');
+        if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(value.trim())) {
+            return value.trim().split(':').map(Number).reduce((total, part) => (total * 60) + part, 0);
+        }
+        const hours = Number(value.match(/(\d+)\s*h/)?.[1] || 0);
+        const minutes = Number(value.match(/(\d+)\s*m/)?.[1] || 0);
+        const seconds = Number(value.match(/(\d+)\s*s/)?.[1] || 0);
+        return (hours * 3600) + (minutes * 60) + seconds;
+    }
+
+    function getCurrentHuntLocation() {
+        const location = document.querySelector('.phud-tloc')?.textContent?.trim() || '';
+        const parts = location.split(/[·•]/).map(part => part.trim()).filter(Boolean);
+        return parts.at(-1) || location || '';
+    }
+
+    function saveHuntSession(snapshot, startedAt) {
+        if (!snapshot || Date.now() - startedAt < 3000 || (!snapshot.defeated && !snapshot.xpGained && !snapshot.balance)) return false;
+        huntHistory.unshift({ ...snapshot, startedAt, endedAt: Date.now() });
+        huntHistory = huntHistory.slice(0, 20);
+        localStorage.setItem(STORAGE_HA_HISTORY, JSON.stringify(huntHistory));
+        return true;
+    }
 
     function formatNumber(num) {
         return new Intl.NumberFormat('pt-BR').format(num);
@@ -3215,7 +3385,7 @@
 
     function showCompareModal() {
         const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
-        const last = lastHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
+        const last = lastHuntSnapshot || huntHistory[0] || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
 
         const cmp = (a, b) => {
             if (a > b) return ['ha-compare-winner', 'ha-compare-loser'];
@@ -3231,7 +3401,7 @@
             }
             return res;
         };
-        const lastTitle = formatTitle(lastHuntStartTime, last.locName);
+        const lastTitle = formatTitle(lastHuntStartTime || last.startedAt, last.locName);
         const currTitle = formatTitle(currentHuntStartTime, curr.locName);
 
         const [balLast, balCurr] = cmp(last.balance, curr.balance);
@@ -3248,6 +3418,7 @@
             <div class="ha-window ha-compare-modal" style="position: relative; box-shadow: 0 12px 32px rgba(0,0,0,0.8);">
                 <div class="ha-title">
                     <span>⚖️ Comparação de Hunts</span>
+                    <button class="ha-sbtn ha-history-clear" type="button" style="margin-left:auto;">Limpar histórico</button>
                     <button class="ha-x ha-compare-close" aria-label="Close" type="button">×</button>
                 </div>
                 <div style="padding: 12px;">
@@ -3261,10 +3432,33 @@
                         <tr><td>⏱️ Tempo</td><td>${last.timeText}</td><td>${curr.timeText}</td></tr>
                         <tr><td>💀 Defeated</td><td>${last.defeated}</td><td>${curr.defeated}</td></tr>
                     </table>
+                    <div style="margin-top:12px;border-top:1px solid #263b4c;padding-top:10px;">
+                        <b style="color:#dce7f1;">Histórico recente</b>
+                        <div class="ha-history-list" style="display:grid;gap:6px;margin-top:8px;max-height:150px;overflow:auto;">
+                            ${huntHistory.length ? huntHistory.slice(0, 10).map(session => `
+                                <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;background:#101d27;border-radius:6px;padding:7px 9px;color:#aebdca;font-size:12px;">
+                                    <span>${escapeHTML(session.locName || 'Hunt')}</span>
+                                    <span>${formatBal(session.balance || 0)}</span>
+                                    <span>${formatNumber(session.xpGained || 0)} XP</span>
+                                </div>
+                            `).join('') : '<span style="color:#718096;font-size:12px;">Nenhuma sessão concluída ainda.</span>'}
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
         document.body.appendChild(backdrop);
+
+        backdrop.querySelector('.ha-history-clear').addEventListener('click', async () => {
+            if (!await showScriptConfirm('Apagar todo o histórico salvo do Hunt Analyzer?', {
+                title: 'Limpar histórico',
+                confirmLabel: 'Apagar'
+            })) return;
+            huntHistory = [];
+            lastHuntSnapshot = null;
+            localStorage.removeItem(STORAGE_HA_HISTORY);
+            backdrop.querySelector('.ha-history-list').innerHTML = '<span style="color:#718096;font-size:12px;">Nenhuma sessão concluída ainda.</span>';
+        });
 
         // Make modal draggable
         let isDragging = false, startX, startY, initialX = 0, initialY = 0;
@@ -3327,10 +3521,24 @@
             if (match) currentBalls = parseInt(match[1], 10);
         }
 
-        const isReset = currentHuntSnapshot && defeated < currentHuntSnapshot.defeated;
+        const locName = getCurrentHuntLocation() || currentHuntSnapshot?.locName || '';
+        const durationSeconds = parseHuntDuration(timeText);
+        const locationChanged = Boolean(
+            currentHuntSnapshot?.locName && locName && currentHuntSnapshot.locName !== locName
+        );
+        const countersReset = Boolean(
+            currentHuntSnapshot && (
+                defeated < currentHuntSnapshot.defeated ||
+                durationSeconds < (currentHuntSnapshot.durationSeconds || 0)
+            )
+        );
+        const isReset = locationChanged || countersReset;
         
         if (isReset) {
-            lastHuntSnapshot = { ...currentHuntSnapshot };
+            const completedSnapshot = { ...currentHuntSnapshot };
+            if (saveHuntSession(completedSnapshot, currentHuntStartTime)) {
+                lastHuntSnapshot = completedSnapshot;
+            }
             capturesCount = 0;
             lastCatchTimestamp = null;
             ballsAtLastCatch = 0;
@@ -3338,16 +3546,7 @@
             currentHuntStartTime = Date.now();
         }
 
-        let locName = currentHuntSnapshot ? currentHuntSnapshot.locName : '';
-        if (!locName || isReset) {
-            const tloc = document.querySelector('.phud-tloc');
-            if (tloc) {
-                const parts = tloc.textContent.split('·');
-                if (parts.length > 1) locName = parts[1].trim();
-            }
-        }
-
-        if (!currentHuntSnapshot) {
+        if (!currentHuntSnapshot || isReset) {
             capturesCount = currentCatch;
         } else if (currentCatch > capturesCount) {
             capturesCount = currentCatch;
@@ -3389,7 +3588,7 @@
             }
         }
 
-        const snapshot = { defeated, timeText, balance, balHour, xpHour, killsHour, xpGained, locName };
+        const snapshot = { defeated, timeText, durationSeconds, balance, balHour, xpHour, killsHour, xpGained, locName };
         currentHuntSnapshot = snapshot;
 
         const oldToggle = haWindow.querySelector('.ha-title .ha-btn-toggle-view');
