@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.4
+// @version      9.9.5
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -155,6 +155,8 @@
             search: 'Buscar...', loading: 'Carregando anúncios…', noListings: 'Nenhum anúncio encontrado.',
             showing: 'Exibindo', of: 'de', loadMore: 'Carregar mais',
             inStock: 'em estoque',
+            buy: 'Comprar', offerOnly: 'Somente oferta', ivTotal: 'IV total',
+            purchaseDone: 'Compra concluída.', purchaseFailed: 'Não foi possível concluir a compra.',
             loadFailed: 'Não foi possível carregar o mercado.', seller: 'Vendedor', quantity: 'Quantidade',
             price: 'Preço', selectItems: 'Selecionar itens ▾', protectedItems: 'Itens protegidos. Busque ao lado para adicionar.',
             noProtected: 'Nenhum item protegido', noItemFound: 'Nenhum item encontrado'
@@ -182,6 +184,8 @@
             search: 'Search...', loading: 'Loading listings…', noListings: 'No listings found.',
             showing: 'Showing', of: 'of', loadMore: 'Load more',
             inStock: 'in stock',
+            buy: 'Buy', offerOnly: 'Offer only', ivTotal: 'Total IV',
+            purchaseDone: 'Purchase completed.', purchaseFailed: 'Could not complete the purchase.',
             loadFailed: 'Could not load the market.', seller: 'Seller', quantity: 'Quantity',
             price: 'Price', selectItems: 'Select items ▾', protectedItems: 'Protected items. Search to add more.',
             noProtected: 'No protected items', noItemFound: 'No item found'
@@ -1000,10 +1004,13 @@
                         });
                         menu.appendChild(item);
                     };
-                    if (isHuntMarketActive()) addItem(`🌐 ${tr('globalMarket')}`, showGlobalMarketWindow);
-                    const captureShopLink = document.querySelector('[data-guide="capture-bar"] .cap-shop-link');
-                    if (captureShopLink) addItem(`🔴 ${tr('ballShop')}`, () => captureShopLink.click());
-                    if (captureShopLink && isHuntSellActive()) addItem(`💰 ${tr('sellItems')}`, showHuntSellWindow);
+                    addItem(`🌐 ${tr('globalMarket')}`, showGlobalMarketWindow);
+                    addItem(`🔴 ${tr('ballShop')}`, () => {
+                        const captureShopLink = document.querySelector('[data-guide="capture-bar"] .cap-shop-link');
+                        if (captureShopLink?.isConnected) captureShopLink.click();
+                        else showPortableBallShop();
+                    });
+                    addItem(`💰 ${tr('sellItems')}`, showHuntSellWindow);
                 };
                 shopsButton.addEventListener('click', event => {
                     event.stopPropagation();
@@ -2139,16 +2146,70 @@
                 const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '—';
                 const price = Number(entry.price ?? entry.totalPrice ?? entry.value ?? 0);
                 const quantity = Number(entry.quantity ?? entry.qty ?? entry.amount ?? 1);
-                const seller = entry.sellerName || entry.seller?.name || entry.ownerName || entry.owner?.name || '—';
                 const quality = entry.quality ?? ref.quality;
-                const iv = entry.iv ?? entry.ivPercent ?? ref.iv ?? ref.ivPercent;
+                const ivTotal = entry.ivTotal ?? ref.ivTotal ?? entry.iv ?? ref.iv;
+                const stats = entry.stats || ref.stats || {};
+                const statText = entry.kind === 'pokemon'
+                    ? [
+                        ['HP', stats.hp], ['ATK', stats.atk], ['DEF', stats.def],
+                        ['SP.ATK', stats.spAtk], ['SP.DEF', stats.spDef], ['SPD', stats.speed]
+                    ].filter(([, value]) => value != null).map(([label, value]) => `${label} ${value}`).join(' · ')
+                    : '';
                 const row = document.createElement('div');
-                row.style.cssText = 'display:grid;grid-template-columns:minmax(150px,1fr) auto auto;gap:12px;align-items:center;background:#14222d;border:1px solid #1f3545;border-radius:7px;padding:9px 11px;color:#e2e8f0;';
-                const details = [quality != null ? `Q: ${quality}` : '', iv != null ? `IV: ${iv}${String(iv).includes('%') ? '' : '%'}` : ''].filter(Boolean).join(' · ');
+                row.style.cssText = 'display:grid;grid-template-columns:minmax(190px,1fr) auto auto auto;gap:12px;align-items:center;background:#14222d;border:1px solid #1f3545;border-radius:7px;padding:9px 11px;color:#e2e8f0;';
+                const details = [
+                    ivTotal != null ? `${tr('ivTotal')}: ${ivTotal}/192` : '',
+                    quality != null ? `Q: ${Number(quality).toFixed(2)}` : ''
+                ].filter(Boolean).join(' · ');
+                const offerOnly = Boolean(entry.offerOnly || price <= 0);
                 row.innerHTML = `
-                    <div><b>${escapeHTML(name)}</b>${details ? `<small style="display:block;color:#90cdf4;margin-top:2px;">${escapeHTML(details)}</small>` : ''}<small style="display:block;color:#718096;">${tr('seller')}: ${escapeHTML(seller)}</small></div>
+                    <div><b>${escapeHTML(name)}</b>${details ? `<small style="display:block;color:#90cdf4;margin-top:2px;">${escapeHTML(details)}</small>` : ''}${statText ? `<small style="display:block;color:#a0aec0;margin-top:2px;">${escapeHTML(statText)}</small>` : ''}</div>
                     <span style="color:#a0aec0;">${tr('quantity')}: <b style="color:#e2e8f0;">${quantity.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}</b></span>
-                    <b style="color:#f6c453;">💲 ${price.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}</b>`;
+                    <b style="color:#f6c453;">${offerOnly ? tr('offerOnly') : `💲 ${price.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}`}</b>`;
+                const buyButton = document.createElement('button');
+                buyButton.type = 'button';
+                buyButton.className = 'mk-bulk-btn market-buy';
+                buyButton.textContent = tr('buy');
+                buyButton.disabled = offerOnly;
+                buyButton.addEventListener('click', async () => {
+                    buyButton.disabled = true;
+                    try {
+                        const characterData = await gameApiRequest('/api/characters/me');
+                        const confirmed = await new Promise(resolve => showPurchaseConfirm({
+                            name,
+                            quantity: 1,
+                            unitPrice: price,
+                            currentGold: Number(characterData.character?.gold || 0)
+                        }, resolve));
+                        if (!confirmed) {
+                            buyButton.disabled = false;
+                            return;
+                        }
+                        await gameApiRequest('/api/game/market/action', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                action: 'buy-stack',
+                                kind: entry.kind || (activeCategory === 'Pokemon' ? 'pokemon' : 'item'),
+                                refId: Number(entry.refId) || 0,
+                                price,
+                                currency: String(entry.currency || 'GOLD').toLowerCase(),
+                                quantity: 1,
+                                ids: Array.isArray(entry.ids) && entry.ids.length ? entry.ids : [entry.id]
+                            })
+                        });
+                        if (quantity <= 1 || entry.kind === 'pokemon') {
+                            currentListings = currentListings.filter(item => item !== entry);
+                        } else {
+                            entry.quantity = quantity - 1;
+                        }
+                        render();
+                        showWindowMessage(backdrop.querySelector('.script-market-window'), tr('purchaseDone'));
+                    } catch (error) {
+                        showWindowMessage(backdrop.querySelector('.script-market-window'), `${tr('purchaseFailed')} ${error.message}`, true);
+                        buyButton.disabled = false;
+                    }
+                });
+                row.appendChild(buyButton);
                 list.appendChild(row);
             });
             if (visible.length < filtered.length) {
@@ -2211,6 +2272,84 @@
             });
         }
         return ballCatalogPromise;
+    }
+
+    async function showPortableBallShop() {
+        document.querySelector('.portable-ball-backdrop')?.remove();
+        const backdrop = document.createElement('div');
+        backdrop.className = 'portable-ball-backdrop';
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;';
+        backdrop.innerHTML = `
+            <div class="ball-window script-portable-ball-window" style="width:min(680px,95vw);max-height:86vh;display:flex;flex-direction:column;background:#0c161f;border:1px solid #2b4c66;border-radius:10px;box-shadow:0 16px 50px rgba(0,0,0,.75);">
+                <div class="ball-head" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #1a2d3a;">
+                    <b style="flex:1;color:#e2e8f0;">🔴 ${tr('ballShop')}</b>
+                    <span class="ball-gold" style="color:#f6c453;"></span>
+                    <button class="cfg-x portable-ball-close" type="button" aria-label="Close">×</button>
+                </div>
+                <div class="portable-ball-status" style="padding:8px 12px;color:#a0aec0;font-size:12px;">${tr('loading')}</div>
+                <div class="portable-ball-list" style="padding:0 12px 12px;overflow:auto;display:grid;gap:7px;"></div>
+            </div>`;
+        document.body.appendChild(backdrop);
+        const close = () => backdrop.remove();
+        backdrop.querySelector('.portable-ball-close').addEventListener('click', close);
+        backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
+
+        const status = backdrop.querySelector('.portable-ball-status');
+        const list = backdrop.querySelector('.portable-ball-list');
+        try {
+            ballCatalogPromise = null;
+            const data = await loadBallCatalog();
+            const catalog = Array.isArray(data.catalog) ? data.catalog : [];
+            backdrop.querySelector('.ball-gold').textContent = `💲 ${Number(data.gold || 0).toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}`;
+            status.textContent = '';
+            catalog.forEach(ball => {
+                const row = document.createElement('div');
+                row.className = 'ball-row';
+                row.style.cssText = 'display:grid;grid-template-columns:minmax(150px,1fr) auto;gap:12px;align-items:center;background:#14222d;border:1px solid #1f3545;border-radius:7px;padding:9px 11px;';
+                const info = document.createElement('div');
+                info.innerHTML = `<b style="color:#e2e8f0;">${escapeHTML(ball.name)}</b><small class="portable-ball-owned" style="display:block;color:#a0aec0;margin-top:3px;">${Number(data.counts?.[String(ball.id)] || 0).toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}× ${tr('inStock')} · 💲${Number(ball.priceGold || 0).toLocaleString()}</small>`;
+                const actions = document.createElement('div');
+                actions.className = 'ball-actions';
+                actions.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;';
+                [1, 10, 100, 1000, 10000].forEach(quantity => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'ball-buy';
+                    button.textContent = `+${quantity.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}`;
+                    button.addEventListener('click', async () => {
+                        button.disabled = true;
+                        try {
+                            const confirmed = await new Promise(resolve => showPurchaseConfirm({
+                                name: ball.name,
+                                quantity,
+                                unitPrice: Number(ball.priceGold) || 0,
+                                currentGold: Number(data.gold) || 0
+                            }, resolve));
+                            if (!confirmed) return;
+                            const result = await gameApiRequest('/api/game/balls/buy', {
+                                method: 'POST',
+                                body: JSON.stringify({ ballId: ball.id, qty: quantity })
+                            });
+                            data.gold = Number(result.gold ?? data.gold);
+                            const count = Number(result.counts?.[String(ball.id)] ?? (Number(data.counts?.[String(ball.id)] || 0) + quantity));
+                            data.counts = { ...(data.counts || {}), [String(ball.id)]: count };
+                            info.querySelector('.portable-ball-owned').textContent = `${count.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}× ${tr('inStock')} · 💲${Number(ball.priceGold || 0).toLocaleString()}`;
+                            backdrop.querySelector('.ball-gold').textContent = `💲 ${data.gold.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}`;
+                            showWindowMessage(backdrop.querySelector('.script-portable-ball-window'), tr('purchaseDone'));
+                        } catch (error) {
+                            showWindowMessage(backdrop.querySelector('.script-portable-ball-window'), `${tr('purchaseFailed')} ${error.message}`, true);
+                        } finally {
+                            button.disabled = false;
+                        }
+                    });
+                    actions.appendChild(button);
+                });
+                row.append(info, actions);
+                list.appendChild(row);
+            });
+        } catch (error) {
+            status.textContent = `${tr('loadFailed')} ${error.message || ''}`.trim();
+        }
     }
 
     function injectHuntBallEnhancements(ballWindow) {
