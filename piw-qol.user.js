@@ -442,6 +442,13 @@
         .mk-lock-sell { font-size: 14px; background: none; border: none; cursor: pointer; margin-left: 6px; padding: 2px; }
         .mk-lock-sell:hover { opacity: 0.8; }
         .mk-srow-head.locked { opacity: 0.6; }
+        .mk-bulk-controls { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
+        .mk-bulk-btn { background: #14222d; color: #63b3ed; border: 1px solid #273f52; border-radius: 4px; padding: 3px 7px; font-size: 11px; font-weight: bold; cursor: pointer; }
+        .mk-bulk-btn:hover { background: #1a365d; border-color: #3182ce; color: #fff; }
+        .hunt-sell-list { max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+        .hunt-sell-row { display: grid; grid-template-columns: auto 1fr 80px; align-items: center; gap: 8px; background: #14222d; border: 1px solid #1a2d3a; border-radius: 5px; padding: 7px 9px; }
+        .hunt-sell-row input[type="number"] { width: 100%; box-sizing: border-box; background: #0c161f; color: #e2e8f0; border: 1px solid #273f52; border-radius: 4px; padding: 5px; }
+        .hunt-sell-row.protected { opacity: 0.45; }
 
         .sell-confirm-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; }
         .sell-confirm-modal { background: #0c161f; border: 1px solid #273f52; border-radius: 8px; padding: 0; color: #e2e8f0; width: 320px; box-shadow: 0 12px 32px rgba(0,0,0,0.8); overflow: hidden; }
@@ -624,6 +631,7 @@
     }
 
     async function teleportToTarget(huntName) {
+        hideDropTooltip();
         if (!huntName) {
             alert('Nenhuma hunt definida!');
             return;
@@ -1245,6 +1253,7 @@
 
                 row.addEventListener('click', (e) => {
                     if (e.target.closest('button')) return;
+                    hideDropTooltip();
                     saveLastHunt(hunt.name);
                     teleportToTarget(hunt.name);
                 });
@@ -1350,9 +1359,227 @@
         return span.textContent.trim().toLowerCase();
     }
 
+    function setNativeInputValue(input, value) {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        if (descriptor?.set) descriptor.set.call(input, String(value));
+        else input.value = String(value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function injectBulkBuyControls(mkWindow) {
+        const numericInputs = mkWindow.querySelectorAll('input[type="number"], input[inputmode="numeric"]');
+        numericInputs.forEach(input => {
+            if (input.dataset.bulkBuyEnhanced || input.closest('.hunt-sell-row')) return;
+
+            const context = input.closest('.mk-buy, .mk-brow, .mk-buyrow, .mk-shop-row, .mk-card, .mk-item') || input.parentElement;
+            if (!context || !context.querySelector('button')) return;
+
+            const controls = document.createElement('span');
+            controls.className = 'mk-bulk-controls';
+            [1000, 10000].forEach(amount => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'mk-bulk-btn';
+                button.textContent = `+${amount.toLocaleString('pt-BR')}`;
+                button.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const current = Math.max(0, parseInt(input.value, 10) || 0);
+                    const max = Number.isFinite(input.maxAsNumber) ? input.maxAsNumber : Infinity;
+                    setNativeInputValue(input, Math.min(current + amount, max));
+                });
+                controls.appendChild(button);
+            });
+
+            input.insertAdjacentElement('afterend', controls);
+            input.dataset.bulkBuyEnhanced = 'true';
+        });
+    }
+
+    function extractSellableInventory(payload) {
+        const root = payload?.data || payload || {};
+        const candidate = root.inventory || root.sellItems || root.playerItems || root.ownedItems;
+        const nestedItems = candidate?.items || candidate?.entries || candidate;
+        const entries = Array.isArray(nestedItems)
+            ? nestedItems
+            : (nestedItems && typeof nestedItems === 'object' ? Object.values(nestedItems) : []);
+
+        return entries.map(entry => {
+            const item = entry?.item || entry;
+            const itemId = String(entry?.itemId || item?.id || item?.key || '').trim();
+            const name = String(entry?.name || item?.name || item?.title || '').trim();
+            const qty = parseInt(entry?.qty ?? entry?.quantity ?? entry?.amount ?? item?.qty ?? item?.quantity, 10) || 0;
+            return { itemId, name, qty };
+        }).filter(item => item.itemId && item.name && item.qty > 0);
+    }
+
+    async function requestShopData() {
+        const response = await fetch('/api/game/shop', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    }
+
+    async function sellItemsThroughShop(items) {
+        const response = await fetch('/api/game/shop/sell', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json().catch(() => ({}));
+    }
+
+    async function showHuntSellWindow() {
+        document.querySelector('.hunt-sell-backdrop')?.remove();
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'sell-confirm-backdrop hunt-sell-backdrop';
+        backdrop.innerHTML = `
+            <div class="sell-confirm-modal" style="width:460px; max-width:94vw;">
+                <div class="sell-confirm-title">
+                    <span>🛒 Vender itens</span>
+                    <button class="hunt-sell-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
+                </div>
+                <div class="sell-confirm-body">
+                    <div class="hunt-sell-status" style="color:#a0aec0;text-align:center;padding:16px;">Carregando inventário...</div>
+                    <div class="hunt-sell-list"></div>
+                    <div class="sell-confirm-footer" style="display:none;">
+                        <button class="sell-confirm-btn yes hunt-sell-submit" type="button">Vender selecionados</button>
+                        <button class="sell-confirm-btn no hunt-sell-cancel" type="button">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
+
+        const close = () => backdrop.remove();
+        backdrop.querySelector('.hunt-sell-close').addEventListener('click', close);
+        backdrop.querySelector('.hunt-sell-cancel').addEventListener('click', close);
+
+        const status = backdrop.querySelector('.hunt-sell-status');
+        const list = backdrop.querySelector('.hunt-sell-list');
+        const footer = backdrop.querySelector('.sell-confirm-footer');
+        const submit = backdrop.querySelector('.hunt-sell-submit');
+
+        try {
+            const inventory = extractSellableInventory(await requestShopData());
+            if (inventory.length === 0) {
+                status.textContent = 'O Mark não retornou itens vendáveis nesta sessão.';
+                return;
+            }
+
+            const protectedNames = new Set([
+                ...getSellLocks(),
+                'Strange Pheromone',
+                'Bronze Boss Token',
+                'Rare Pokemon Picture',
+                'Rare Pokémon Picture'
+            ].map(name => name.toLowerCase()));
+
+            status.style.display = 'none';
+            footer.style.display = 'flex';
+            inventory.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
+                const isProtected = protectedNames.has(item.name.toLowerCase());
+                const row = document.createElement('label');
+                row.className = `hunt-sell-row${isProtected ? ' protected' : ''}`;
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.disabled = isProtected;
+                checkbox.dataset.itemId = item.itemId;
+                checkbox.dataset.itemName = item.name;
+
+                const name = document.createElement('span');
+                name.textContent = `${item.name} (${item.qty.toLocaleString('pt-BR')})${isProtected ? ' 🔒' : ''}`;
+
+                const quantity = document.createElement('input');
+                quantity.type = 'number';
+                quantity.min = '1';
+                quantity.max = String(item.qty);
+                quantity.value = String(item.qty);
+                quantity.disabled = isProtected;
+
+                row.append(checkbox, name, quantity);
+                list.appendChild(row);
+            });
+
+            submit.addEventListener('click', () => {
+                const selectedRows = Array.from(list.querySelectorAll('.hunt-sell-row')).flatMap(row => {
+                    const checkbox = row.querySelector('input[type="checkbox"]');
+                    const quantity = row.querySelector('input[type="number"]');
+                    if (!checkbox.checked) return [];
+                    const qty = Math.min(parseInt(quantity.value, 10) || 0, parseInt(quantity.max, 10) || 0);
+                    return qty > 0 ? [{
+                        itemId: checkbox.dataset.itemId,
+                        name: checkbox.dataset.itemName,
+                        qty
+                    }] : [];
+                });
+
+                if (selectedRows.length === 0) {
+                    status.textContent = 'Selecione pelo menos um item.';
+                    status.style.display = '';
+                    return;
+                }
+
+                const executeSale = async () => {
+                    submit.disabled = true;
+                    submit.textContent = 'Vendendo...';
+                    try {
+                        await sellItemsThroughShop(selectedRows.map(({ itemId, qty }) => ({ itemId, qty })));
+                        close();
+                    } catch (error) {
+                        console.error('Falha ao vender itens no Mark:', error);
+                        status.textContent = 'Não foi possível concluir a venda. Tente novamente.';
+                        status.style.display = '';
+                        submit.disabled = false;
+                        submit.textContent = 'Vender selecionados';
+                    }
+                };
+
+                const confirmationNames = new Set(getSellConfirmItems().map(name => name.toLowerCase()));
+                const selectedToConfirm = selectedRows
+                    .filter(item => confirmationNames.has(item.name.toLowerCase()))
+                    .map(item => item.name);
+                if (selectedToConfirm.length > 0) {
+                    showSellConfirm(selectedToConfirm, confirmed => {
+                        if (confirmed) executeSale();
+                    });
+                } else {
+                    executeSale();
+                }
+            });
+        } catch (error) {
+            console.error('Falha ao carregar o inventário do Mark:', error);
+            status.textContent = 'Não foi possível carregar os itens para venda.';
+        }
+    }
+
+    function injectHuntSellAccess(mkWindow) {
+        const tabs = mkWindow.querySelector('.mk-tabs, .mk-tabbar');
+        if (!tabs || tabs.querySelector('.mk-hunt-sell-tab')) return;
+
+        const hasNativeSell = Array.from(tabs.querySelectorAll('.mk-tab'))
+            .some(tab => /\bsell\b|vender/i.test(tab.textContent));
+        if (hasNativeSell) return;
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'mk-tab mk-hunt-sell-tab';
+        button.textContent = 'Sell';
+        button.title = 'Vender itens pelo Mark';
+        button.addEventListener('click', showHuntSellWindow);
+        tabs.appendChild(button);
+    }
+
     function injectShopEnhancements() {
-        const mkWindow = document.querySelector('.win-window.mk-window');
+        const mkWindow = document.querySelector('.mk-window');
         if (!mkWindow) return;
+
+        injectBulkBuyControls(mkWindow);
+        injectHuntSellAccess(mkWindow);
         
         // 1. Sell Tab: Locks & Intercept Sell
         const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Sell'));
@@ -1960,7 +2187,7 @@
             injectQuickTPButton();
             if (document.querySelector('.cfg-window')) injectConfigTab();
             applyChatState();
-            if (document.querySelector('.win-window')) injectShopEnhancements();
+            if (document.querySelector('.mk-window')) injectShopEnhancements();
             if (document.querySelector('.dex-window')) injectDexEnhancements();
             if (document.querySelector('.ha-window:not(.ha-compare-modal)')) trackHuntAnalyzer();
 
