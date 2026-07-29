@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.0
+// @version      9.9.1
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -709,12 +709,6 @@
         }
 
         await loadMapMarkersData();
-        const mappedHunt = findMappedHunt(huntName);
-        const mappedSlug = getMarkerSlug(mappedHunt);
-        if (mappedSlug && sendGameMessage({ type: 'enter-hunt', slug: mappedSlug })) {
-            saveLastHunt(huntName);
-            return;
-        }
 
         const mapBtn = document.querySelector('button[data-guide="dock-map"]');
         let mapWindow = document.querySelector('.map-window');
