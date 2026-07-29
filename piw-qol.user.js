@@ -6,12 +6,78 @@
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
 // @grant        none
+// @run-at       document-start
 // @updateURL    https://raw.githubusercontent.com/JulianoCLI/PIW-QOL/main/piw-qol.user.js
 // @downloadURL  https://raw.githubusercontent.com/JulianoCLI/PIW-QOL/main/piw-qol.user.js
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    const NativeWebSocket = window.WebSocket;
+    let gameSocket = null;
+    let latestInventory = null;
+    let latestPokemon = null;
+    const gameEventWaiters = new Map();
+
+    function handleGameSocketMessage(event) {
+        let message;
+        try {
+            message = JSON.parse(event.data);
+        } catch {
+            return;
+        }
+        if (message?.type === 'inventory') latestInventory = message.items || [];
+        if (message?.type === 'pokes') latestPokemon = message.list || [];
+        const waiters = gameEventWaiters.get(message?.type);
+        if (waiters) {
+            gameEventWaiters.delete(message.type);
+            waiters.forEach(resolve => resolve(message));
+        }
+    }
+
+    function TrackedWebSocket(url, protocols) {
+        const socket = protocols === undefined
+            ? new NativeWebSocket(url)
+            : new NativeWebSocket(url, protocols);
+        if (String(url).includes('/ws')) {
+            gameSocket = socket;
+            socket.addEventListener('message', handleGameSocketMessage);
+            socket.addEventListener('close', () => {
+                if (gameSocket === socket) gameSocket = null;
+            });
+        }
+        return socket;
+    }
+    TrackedWebSocket.prototype = NativeWebSocket.prototype;
+    Object.setPrototypeOf(TrackedWebSocket, NativeWebSocket);
+    window.WebSocket = TrackedWebSocket;
+
+    function sendGameMessage(message) {
+        if (!gameSocket || gameSocket.readyState !== NativeWebSocket.OPEN) return false;
+        gameSocket.send(JSON.stringify(message));
+        return true;
+    }
+
+    function requestGameEvent(type, requestType, cachedValue, timeoutMs = 2500) {
+        if (cachedValue) return Promise.resolve(cachedValue);
+        return new Promise(resolve => {
+            const waiters = gameEventWaiters.get(type) || [];
+            const waiter = message => resolve(type === 'inventory' ? message.items || [] : message.list || []);
+            waiters.push(waiter);
+            gameEventWaiters.set(type, waiters);
+            if (!sendGameMessage({ type: requestType })) {
+                gameEventWaiters.set(type, waiters.filter(item => item !== waiter));
+                resolve([]);
+                return;
+            }
+            setTimeout(() => {
+                const pending = gameEventWaiters.get(type) || [];
+                gameEventWaiters.set(type, pending.filter(item => item !== waiter));
+                resolve([]);
+            }, timeoutMs);
+        });
+    }
 
     const STORAGE_FAVS = 'hunts_favoritas_v1';
     const STORAGE_LAST_HUNT = 'ultima_hunt_v1';
@@ -34,6 +100,7 @@
     const globalItemApiData = new Map();
     const globalHuntMarkerData = new Map();
     let mapMarkersLoadPromise = null;
+    let itemDataLoadPromise = null;
 
     function escapeHTML(value) {
         return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -213,7 +280,7 @@
     }
 
     loadExternalPokemonData();
-    loadExternalItemData();
+    itemDataLoadPromise = loadExternalItemData();
     loadMapMarkersData();
 
     function applyOutlandModifier(baseMultiplier) {
@@ -510,7 +577,11 @@
         .ha-compare-modal .ha-title { cursor: grab; user-select: none; }
         .ha-compare-modal .ha-title:active { cursor: grabbing; }
     `;
-    document.head.appendChild(style);
+    function appendStyleWhenReady(styleElement) {
+        if (document.head) document.head.appendChild(styleElement);
+        else document.addEventListener('DOMContentLoaded', () => document.head.appendChild(styleElement), { once: true });
+    }
+    appendStyleWhenReady(style);
 
     const styleMapMod = document.createElement('style');
     styleMapMod.id = 'simplifier-map-override';
@@ -638,6 +709,12 @@
         }
 
         await loadMapMarkersData();
+        const mappedHunt = findMappedHunt(huntName);
+        const mappedSlug = getMarkerSlug(mappedHunt);
+        if (mappedSlug && sendGameMessage({ type: 'enter-hunt', slug: mappedSlug })) {
+            saveLastHunt(huntName);
+            return;
+        }
 
         const mapBtn = document.querySelector('button[data-guide="dock-map"]');
         let mapWindow = document.querySelector('.map-window');
@@ -1359,76 +1436,99 @@
         return span.textContent.trim().toLowerCase();
     }
 
-    function setNativeInputValue(input, value) {
-        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-        if (descriptor?.set) descriptor.set.call(input, String(value));
-        else input.value = String(value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+    function getGameTokens() {
+        try {
+            return JSON.parse(sessionStorage.getItem('pokeweb:tokens') || 'null');
+        } catch {
+            return null;
+        }
     }
 
-    function injectBulkBuyControls(mkWindow) {
-        const numericInputs = mkWindow.querySelectorAll('input[type="number"], input[inputmode="numeric"]');
-        numericInputs.forEach(input => {
-            if (input.dataset.bulkBuyEnhanced || input.closest('.hunt-sell-row')) return;
-
-            const context = input.closest('.mk-buy, .mk-brow, .mk-buyrow, .mk-shop-row, .mk-card, .mk-item') || input.parentElement;
-            if (!context || !context.querySelector('button')) return;
-
-            const controls = document.createElement('span');
-            controls.className = 'mk-bulk-controls';
-            [1000, 10000].forEach(amount => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'mk-bulk-btn';
-                button.textContent = `+${amount.toLocaleString('pt-BR')}`;
-                button.addEventListener('click', event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const current = Math.max(0, parseInt(input.value, 10) || 0);
-                    const max = Number.isFinite(input.maxAsNumber) ? input.maxAsNumber : Infinity;
-                    setNativeInputValue(input, Math.min(current + amount, max));
-                });
-                controls.appendChild(button);
-            });
-
-            input.insertAdjacentElement('afterend', controls);
-            input.dataset.bulkBuyEnhanced = 'true';
-        });
-    }
-
-    function extractSellableInventory(payload) {
-        const root = payload?.data || payload || {};
-        const candidate = root.inventory || root.sellItems || root.playerItems || root.ownedItems;
-        const nestedItems = candidate?.items || candidate?.entries || candidate;
-        const entries = Array.isArray(nestedItems)
-            ? nestedItems
-            : (nestedItems && typeof nestedItems === 'object' ? Object.values(nestedItems) : []);
-
-        return entries.map(entry => {
-            const item = entry?.item || entry;
-            const itemId = String(entry?.itemId || item?.id || item?.key || '').trim();
-            const name = String(entry?.name || item?.name || item?.title || '').trim();
-            const qty = parseInt(entry?.qty ?? entry?.quantity ?? entry?.amount ?? item?.qty ?? item?.quantity, 10) || 0;
-            return { itemId, name, qty };
-        }).filter(item => item.itemId && item.name && item.qty > 0);
-    }
-
-    async function requestShopData() {
-        const response = await fetch('/api/game/shop', { credentials: 'same-origin' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-    }
-
-    async function sellItemsThroughShop(items) {
-        const response = await fetch('/api/game/shop/sell', {
+    async function refreshGameAccessToken() {
+        const tokens = getGameTokens();
+        if (!tokens?.refreshToken) return null;
+        const response = await fetch('/api/auth/refresh', {
             method: 'POST',
-            credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: tokens.refreshToken })
+        });
+        if (!response.ok) return null;
+        const refreshed = await response.json();
+        if (!refreshed?.accessToken) return null;
+        sessionStorage.setItem('pokeweb:tokens', JSON.stringify(refreshed));
+        return refreshed.accessToken;
+    }
+
+    async function gameApiRequest(url, options = {}) {
+        const send = accessToken => fetch(url, {
+            ...options,
+            headers: {
+                ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+                ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                ...(options.headers || {})
+            }
+        });
+
+        let response = await send(getGameTokens()?.accessToken);
+        if (response.status === 401) {
+            const refreshedToken = await refreshGameAccessToken();
+            if (refreshedToken) response = await send(refreshedToken);
+        }
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result?.message || `HTTP ${response.status}`);
+        return result;
+    }
+
+    async function readSellableInventoryFromDOM() {
+        if (itemDataLoadPromise) await itemDataLoadPromise;
+        const findVisibleInventory = () => Array.from(document.querySelectorAll('.inv-window')).find(windowElement => {
+            const style = getComputedStyle(windowElement);
+            const rect = windowElement.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        }) || null;
+
+        let inventoryWindow = findVisibleInventory();
+        const openedByScript = !inventoryWindow;
+        if (!inventoryWindow) {
+            document.querySelector('[data-guide="dock-inventory"]')?.click();
+            for (let attempt = 0; attempt < 15 && !inventoryWindow; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                inventoryWindow = findVisibleInventory();
+            }
+        }
+        if (!inventoryWindow) throw new Error('Inventário não abriu.');
+
+        const payload = await fetch(ITEMS_JSON_URL).then(response => response.json());
+        const items = Array.isArray(payload) ? payload : (payload.items || []);
+        const catalogById = new Map(items.map(item => [String(item.id), item]));
+
+        const entries = Array.from(inventoryWindow.querySelectorAll('.inv-slot[data-guide^="inv-item-"]'))
+            .map(slot => {
+                const itemId = slot.dataset.guide.replace('inv-item-', '');
+                const name = slot.querySelector('.inv-ico')?.alt?.trim() || '';
+                const qty = parseInt(slot.querySelector('.inv-qty')?.textContent, 10) || 0;
+                const catalogItem = catalogById.get(String(itemId));
+                return {
+                    itemId,
+                    name,
+                    qty,
+                    category: String(catalogItem?.category || '').toLowerCase(),
+                    npcPrice: parseGameNumber(catalogItem?.npcPrice)
+                };
+            })
+            .filter(item => item.itemId && item.name && item.qty > 0 && item.npcPrice > 0)
+            .filter(item => !['heal', 'revive', 'stone'].includes(item.category));
+
+        if (openedByScript) inventoryWindow.querySelector('.cfg-x')?.click();
+        return entries;
+    }
+
+    function sellItemsThroughShop(items) {
+        return gameApiRequest('/api/game/shop/sell', {
+            method: 'POST',
             body: JSON.stringify({ items })
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json().catch(() => ({}));
     }
 
     async function showHuntSellWindow() {
@@ -1440,6 +1540,7 @@
             <div class="sell-confirm-modal" style="width:460px; max-width:94vw;">
                 <div class="sell-confirm-title">
                     <span>🛒 Vender itens</span>
+                    <button class="hunt-pokemon-open mk-bulk-btn" type="button" style="margin-left:auto;">🐾 Pokémon</button>
                     <button class="hunt-sell-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
                 </div>
                 <div class="sell-confirm-body">
@@ -1457,6 +1558,10 @@
         const close = () => backdrop.remove();
         backdrop.querySelector('.hunt-sell-close').addEventListener('click', close);
         backdrop.querySelector('.hunt-sell-cancel').addEventListener('click', close);
+        backdrop.querySelector('.hunt-pokemon-open').addEventListener('click', () => {
+            close();
+            showHuntPokemonSellWindow();
+        });
 
         const status = backdrop.querySelector('.hunt-sell-status');
         const list = backdrop.querySelector('.hunt-sell-list');
@@ -1464,9 +1569,29 @@
         const submit = backdrop.querySelector('.hunt-sell-submit');
 
         try {
-            const inventory = extractSellableInventory(await requestShopData());
+            const [inventory, shopData] = await Promise.all([
+                gameSocket
+                    ? requestGameEvent('inventory', 'inv-get', latestInventory).then(async entries => {
+                        if (!entries.length) return readSellableInventoryFromDOM();
+                        const payload = await fetch(ITEMS_JSON_URL).then(response => response.json());
+                        const catalog = new Map((payload.items || []).map(item => [String(item.id), item]));
+                        return entries.map(entry => {
+                            const catalogItem = catalog.get(String(entry.itemId));
+                            return {
+                                itemId: String(entry.itemId),
+                                name: catalogItem?.name || `Item ${entry.itemId}`,
+                                qty: Number(entry.quantity) || 0,
+                                category: String(catalogItem?.category || '').toLowerCase(),
+                                npcPrice: Number(catalogItem?.npcPrice) || 0
+                            };
+                        }).filter(item => item.qty > 0 && item.npcPrice > 0)
+                            .filter(item => !['heal', 'revive', 'stone'].includes(item.category));
+                    })
+                    : readSellableInventoryFromDOM(),
+                gameApiRequest('/api/game/shop')
+            ]);
             if (inventory.length === 0) {
-                status.textContent = 'O Mark não retornou itens vendáveis nesta sessão.';
+                status.textContent = 'Nenhum item vendável foi encontrado no inventário.';
                 return;
             }
 
@@ -1490,9 +1615,10 @@
                 checkbox.disabled = isProtected;
                 checkbox.dataset.itemId = item.itemId;
                 checkbox.dataset.itemName = item.name;
+                checkbox.dataset.unitPrice = String(item.npcPrice);
 
                 const name = document.createElement('span');
-                name.textContent = `${item.name} (${item.qty.toLocaleString('pt-BR')})${isProtected ? ' 🔒' : ''}`;
+                name.textContent = `${item.name} (${item.qty.toLocaleString('pt-BR')}) · 💲${item.npcPrice.toLocaleString('pt-BR')}${isProtected ? ' 🔒' : ''}`;
 
                 const quantity = document.createElement('input');
                 quantity.type = 'number';
@@ -1504,6 +1630,22 @@
                 row.append(checkbox, name, quantity);
                 list.appendChild(row);
             });
+
+            const updateSaleSummary = () => {
+                let total = 0;
+                list.querySelectorAll('.hunt-sell-row').forEach(row => {
+                    const checkbox = row.querySelector('input[type="checkbox"]');
+                    const quantity = row.querySelector('input[type="number"]');
+                    if (checkbox.checked) {
+                        total += (parseInt(quantity.value, 10) || 0) * (Number(checkbox.dataset.unitPrice) || 0);
+                    }
+                });
+                status.textContent = `Saldo atual: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Venda selecionada: 💲${total.toLocaleString('pt-BR')}`;
+                status.style.display = '';
+            };
+            list.addEventListener('input', updateSaleSummary);
+            list.addEventListener('change', updateSaleSummary);
+            updateSaleSummary();
 
             submit.addEventListener('click', () => {
                 const selectedRows = Array.from(list.querySelectorAll('.hunt-sell-row')).flatMap(row => {
@@ -1528,7 +1670,9 @@
                     submit.disabled = true;
                     submit.textContent = 'Vendendo...';
                     try {
-                        await sellItemsThroughShop(selectedRows.map(({ itemId, qty }) => ({ itemId, qty })));
+                        const result = await sellItemsThroughShop(selectedRows.map(({ itemId, qty }) => ({ itemId, qty })));
+                        latestInventory = null;
+                        alert(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`);
                         close();
                     } catch (error) {
                         console.error('Falha ao vender itens no Mark:', error);
@@ -1557,29 +1701,187 @@
         }
     }
 
-    function injectHuntSellAccess(mkWindow) {
-        const tabs = mkWindow.querySelector('.mk-tabs, .mk-tabbar');
-        if (!tabs || tabs.querySelector('.mk-hunt-sell-tab')) return;
+    async function showHuntPokemonSellWindow() {
+        document.querySelector('.hunt-sell-backdrop')?.remove();
+        const backdrop = document.createElement('div');
+        backdrop.className = 'sell-confirm-backdrop hunt-sell-backdrop';
+        backdrop.innerHTML = `
+            <div class="sell-confirm-modal" style="width:500px; max-width:94vw;">
+                <div class="sell-confirm-title">
+                    <span>🐾 Vender Pokémon</span>
+                    <button class="hunt-items-open mk-bulk-btn" type="button" style="margin-left:auto;">🎒 Itens</button>
+                    <button class="hunt-sell-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
+                </div>
+                <div class="sell-confirm-body">
+                    <div class="hunt-sell-status" style="color:#a0aec0;text-align:center;padding:8px;">Carregando Pokémon...</div>
+                    <div class="hunt-sell-list"></div>
+                    <div class="sell-confirm-footer" style="display:none;">
+                        <button class="sell-confirm-btn yes hunt-pokemon-submit" type="button">Vender selecionados</button>
+                        <button class="sell-confirm-btn no hunt-sell-cancel" type="button">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
 
-        const hasNativeSell = Array.from(tabs.querySelectorAll('.mk-tab'))
-            .some(tab => /\bsell\b|vender/i.test(tab.textContent));
-        if (hasNativeSell) return;
+        const close = () => backdrop.remove();
+        backdrop.querySelector('.hunt-sell-close').addEventListener('click', close);
+        backdrop.querySelector('.hunt-sell-cancel').addEventListener('click', close);
+        backdrop.querySelector('.hunt-items-open').addEventListener('click', () => {
+            close();
+            showHuntSellWindow();
+        });
 
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'mk-tab mk-hunt-sell-tab';
-        button.textContent = 'Sell';
-        button.title = 'Vender itens pelo Mark';
-        button.addEventListener('click', showHuntSellWindow);
-        tabs.appendChild(button);
+        const status = backdrop.querySelector('.hunt-sell-status');
+        const list = backdrop.querySelector('.hunt-sell-list');
+        const footer = backdrop.querySelector('.sell-confirm-footer');
+        const submit = backdrop.querySelector('.hunt-pokemon-submit');
+
+        try {
+            const [pokemon, shopData] = await Promise.all([
+                requestGameEvent('pokes', 'pokes-get', latestPokemon),
+                gameApiRequest('/api/game/shop')
+            ]);
+            const sellable = pokemon.filter(poke => !poke.team && !poke.starter && Number(poke.sellValue) > 0);
+            if (!sellable.length) {
+                status.textContent = 'Nenhum Pokémon vendável foi encontrado.';
+                return;
+            }
+
+            footer.style.display = 'flex';
+            sellable.forEach(poke => {
+                const protectedPoke = Boolean(poke.locked || poke.shiny || poke.market || poke.listed);
+                const row = document.createElement('label');
+                row.className = `hunt-sell-row${protectedPoke ? ' protected' : ''}`;
+                row.style.gridTemplateColumns = 'auto 1fr auto';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.disabled = protectedPoke;
+                checkbox.dataset.pokeId = String(poke.id);
+                checkbox.dataset.value = String(poke.sellValue || 0);
+
+                const name = document.createElement('span');
+                const flags = [
+                    poke.shiny ? '✨' : '',
+                    poke.locked ? '🔒' : '',
+                    (poke.market || poke.listed) ? '🏷️' : ''
+                ].filter(Boolean).join(' ');
+                name.textContent = `${poke.name || `Pokémon ${poke.speciesId}`} · Lv.${poke.level || 1} · IV ${poke.ivTotal ?? '—'} ${flags}`;
+
+                const value = document.createElement('strong');
+                value.textContent = `💲${Number(poke.sellValue).toLocaleString('pt-BR')}`;
+                row.append(checkbox, name, value);
+                list.appendChild(row);
+            });
+
+            const updateSummary = () => {
+                const total = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'))
+                    .reduce((sum, checkbox) => sum + Number(checkbox.dataset.value || 0), 0);
+                status.textContent = `Saldo atual: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Venda selecionada: 💲${total.toLocaleString('pt-BR')}`;
+            };
+            list.addEventListener('change', updateSummary);
+            updateSummary();
+
+            submit.addEventListener('click', async () => {
+                const pokeIds = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'))
+                    .map(checkbox => checkbox.dataset.pokeId);
+                if (!pokeIds.length) return alert('Selecione pelo menos um Pokémon.');
+                if (!confirm(`Vender ${pokeIds.length} Pokémon selecionado(s)?`)) return;
+                submit.disabled = true;
+                try {
+                    const result = await gameApiRequest('/api/game/pokemon/sell', {
+                        method: 'POST',
+                        body: JSON.stringify({ pokeIds })
+                    });
+                    latestPokemon = null;
+                    alert(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`);
+                    close();
+                    sendGameMessage({ type: 'pokes-get' });
+                } catch (error) {
+                    alert(`Não foi possível concluir a venda: ${error.message}`);
+                    submit.disabled = false;
+                }
+            });
+        } catch (error) {
+            console.error('Falha ao carregar os Pokémon:', error);
+            status.textContent = 'Não foi possível carregar os Pokémon.';
+        }
+    }
+
+    let ballCatalogPromise = null;
+
+    function loadBallCatalog() {
+        if (!ballCatalogPromise) {
+            ballCatalogPromise = gameApiRequest('/api/game/balls').catch(error => {
+                ballCatalogPromise = null;
+                throw error;
+            });
+        }
+        return ballCatalogPromise;
+    }
+
+    function injectHuntBallEnhancements(ballWindow) {
+        if (!ballWindow) return;
+
+        const header = ballWindow.querySelector('.ball-head');
+        if (header && !header.querySelector('.hunt-sell-open')) {
+            const sellButton = document.createElement('button');
+            sellButton.type = 'button';
+            sellButton.className = 'mk-bulk-btn hunt-sell-open';
+            sellButton.textContent = '💰 Vender itens';
+            sellButton.addEventListener('click', async () => {
+                ballWindow.querySelector('.cfg-x')?.click();
+                await new Promise(resolve => setTimeout(resolve, 100));
+                showHuntSellWindow();
+            });
+            header.querySelector('.cfg-x')?.before(sellButton);
+        }
+
+        ballWindow.querySelectorAll('.ball-row').forEach(row => {
+            const actions = row.querySelector('.ball-actions');
+            const ballName = row.querySelector('.ball-name')?.textContent?.trim();
+            if (!actions || !ballName || !actions.querySelector('.ball-buy') || actions.dataset.bulkEnhanced) return;
+
+            [1000, 10000].forEach(quantity => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'ball-buy';
+                button.textContent = `+${quantity.toLocaleString('pt-BR')}`;
+                button.addEventListener('click', async () => {
+                    const confirmed = confirm(`Comprar ${quantity.toLocaleString('pt-BR')}× ${ballName}?`);
+                    if (!confirmed) return;
+
+                    button.disabled = true;
+                    try {
+                        const data = await loadBallCatalog();
+                        const ball = data.catalog?.find(item => item.name === ballName);
+                        if (!ball?.id) throw new Error('Poké Bola não encontrada no catálogo.');
+                        const result = await gameApiRequest('/api/game/balls/buy', {
+                            method: 'POST',
+                            body: JSON.stringify({ ballId: ball.id, qty: quantity })
+                        });
+                        const owned = row.querySelector('.ball-own');
+                        const count = result.counts?.[String(ball.id)];
+                        if (owned && count !== undefined) owned.textContent = `${Number(count).toLocaleString('pt-BR')}× em estoque`;
+                        const gold = ballWindow.querySelector('.ball-gold');
+                        if (gold && result.gold !== undefined) gold.textContent = `💲 ${Number(result.gold).toLocaleString('pt-BR')}`;
+                    } catch (error) {
+                        console.error('Falha ao comprar Poké Bolas:', error);
+                        alert(`Não foi possível concluir a compra: ${error.message}`);
+                    } finally {
+                        button.disabled = false;
+                    }
+                });
+                actions.appendChild(button);
+            });
+            actions.dataset.bulkEnhanced = 'true';
+        });
     }
 
     function injectShopEnhancements() {
         const mkWindow = document.querySelector('.mk-window');
         if (!mkWindow) return;
-
-        injectBulkBuyControls(mkWindow);
-        injectHuntSellAccess(mkWindow);
         
         // 1. Sell Tab: Locks & Intercept Sell
         const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab')).find(t => t.classList.contains('on') && t.textContent.includes('Sell'));
@@ -2188,6 +2490,7 @@
             if (document.querySelector('.cfg-window')) injectConfigTab();
             applyChatState();
             if (document.querySelector('.mk-window')) injectShopEnhancements();
+            if (document.querySelector('.ball-window')) injectHuntBallEnhancements(document.querySelector('.ball-window'));
             if (document.querySelector('.dex-window')) injectDexEnhancements();
             if (document.querySelector('.ha-window:not(.ha-compare-modal)')) trackHuntAnalyzer();
 
@@ -2199,6 +2502,13 @@
         }, 150);
     });
 
-    applyMapScriptState();
-    observer.observe(document.body, { childList: true, subtree: true });
+    function initializeDOMEnhancements() {
+        applyMapScriptState();
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeDOMEnhancements, { once: true });
+    } else {
+        initializeDOMEnhancements();
+    }
 })();
