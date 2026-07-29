@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.62
+// @version      9.9.63
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -1013,11 +1013,7 @@
                         menu.appendChild(item);
                     };
                     addItem(`🌐 ${tr('globalMarket')}`, showGlobalMarketWindow);
-                    addItem(`🔴 ${tr('ballShop')}`, () => {
-                        const captureShopLink = document.querySelector('[data-guide="capture-bar"] .cap-shop-link');
-                        if (captureShopLink?.isConnected) captureShopLink.click();
-                        else showPortableBallShop();
-                    });
+                    addItem(`🔴 ${tr('ballShop')}`, showPortableBallShop);
                     addItem(`💰 ${tr('sellItems')}`, showHuntSellWindow);
                 };
                 shopsButton.addEventListener('click', event => {
@@ -1032,6 +1028,17 @@
                 });
                 shopWrap.append(shopsButton, menu);
                 tpBtn.after(shopWrap);
+            }
+
+            if (!document.getElementById('dock-btn-depot')) {
+                const depotButton = document.createElement('button');
+                depotButton.id = 'dock-btn-depot';
+                depotButton.className = 'dock-btn';
+                depotButton.type = 'button';
+                depotButton.textContent = '📦';
+                depotButton.title = 'Depot';
+                depotButton.addEventListener('click', showPortableDepot);
+                document.getElementById('dock-btn-shops')?.closest('.script-shop-wrap')?.after(depotButton);
             }
         }
     }
@@ -1868,6 +1875,147 @@
         messageElement._hideTimer = setTimeout(() => messageElement.remove(), 3500);
     }
 
+    async function showPortableDepot() {
+        document.querySelector('.portable-depot-backdrop')?.remove();
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'sell-confirm-backdrop portable-depot-backdrop';
+        backdrop.innerHTML = `
+            <div class="sell-confirm-modal" style="width:780px;max-width:95vw;">
+                <div class="sell-confirm-title">
+                    <span>📦 Depot</span>
+                    <button class="mk-bulk-btn depot-tab active" data-tab="items" type="button" style="margin-left:auto;">Itens</button>
+                    <button class="mk-bulk-btn depot-tab" data-tab="pokemon" type="button">Pokémon</button>
+                    <button class="portable-depot-close" type="button" style="background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
+                </div>
+                <div class="sell-confirm-body">
+                    <div class="portable-depot-status" style="color:#a0aec0;text-align:center;padding:16px;">Carregando Depot...</div>
+                    <div class="portable-depot-content"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
+
+        const close = () => backdrop.remove();
+        backdrop.querySelector('.portable-depot-close').addEventListener('click', close);
+        backdrop.addEventListener('click', event => {
+            if (event.target === backdrop) close();
+        });
+
+        const status = backdrop.querySelector('.portable-depot-status');
+        const content = backdrop.querySelector('.portable-depot-content');
+        let activeTab = 'items';
+        let depotData = null;
+        let pokes = [];
+        let busy = false;
+
+        const makeColumn = (title, entries, direction, emptyText, isPokemon = false) => {
+            const column = document.createElement('section');
+            column.style.cssText = 'flex:1;min-width:260px;background:#0d1822;border:1px solid #243545;border-radius:10px;padding:10px;max-height:58vh;overflow:auto;';
+            const heading = document.createElement('div');
+            heading.style.cssText = 'font-weight:800;color:#e7edf4;margin:2px 4px 10px;';
+            heading.textContent = `${title} (${entries.length})`;
+            column.appendChild(heading);
+
+            if (!entries.length) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'color:#7f91a3;text-align:center;padding:28px 8px;';
+                empty.textContent = emptyText;
+                column.appendChild(empty);
+                return column;
+            }
+
+            entries.forEach(entry => {
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.style.cssText = 'display:flex;width:100%;align-items:center;gap:9px;background:#13222f;color:#e7edf4;border:1px solid #263b4c;border-radius:8px;padding:8px;margin:0 0 7px;cursor:pointer;text-align:left;';
+                const image = isPokemon ? document.createElement('span') : document.createElement('img');
+                if (isPokemon) {
+                    image.textContent = '🐾';
+                    image.style.cssText = 'width:34px;text-align:center;font-size:22px;flex:none;';
+                } else {
+                    image.src = entry.icon;
+                    image.alt = entry.name || '';
+                    image.style.cssText = 'width:34px;height:34px;object-fit:contain;flex:none;';
+                    image.onerror = () => { image.style.visibility = 'hidden'; };
+                }
+                const label = document.createElement('span');
+                label.style.cssText = 'min-width:0;flex:1;font-weight:700;';
+                label.textContent = isPokemon
+                    ? `${entry.name || entry.pokeId} · IV ${Number(entry.ivTotal || 0)} · Q ${Number(entry.quality || 0).toFixed(1)}`
+                    : `${entry.name} · ${Number(entry.quantity || 0).toLocaleString('pt-BR')}`;
+                const action = document.createElement('span');
+                action.style.cssText = 'color:#64c8ff;font-size:12px;font-weight:800;';
+                action.textContent = direction === 'store' ? 'Guardar →' : '← Retirar';
+                row.append(image, label, action);
+                row.addEventListener('click', async () => {
+                    if (busy) return;
+                    busy = true;
+                    row.disabled = true;
+                    try {
+                        if (isPokemon) {
+                            sendGameMessage({ type: direction === 'store' ? 'poke-store' : 'poke-withdraw', pokeId: entry.id });
+                            latestPokemon = null;
+                            await new Promise(resolve => setTimeout(resolve, 350));
+                            pokes = await requestGameEvent('pokes', 'pokes-get', latestPokemon);
+                        } else {
+                            depotData = await gameApiRequest('/api/game/depot/move', {
+                                method: 'POST',
+                                body: JSON.stringify({ itemId: entry.id, dir: direction })
+                            });
+                        }
+                        render();
+                    } catch (error) {
+                        showWindowMessage(backdrop.querySelector('.sell-confirm-modal'), error.message || 'Não foi possível mover.', true);
+                    } finally {
+                        busy = false;
+                    }
+                });
+                column.appendChild(row);
+            });
+            return column;
+        };
+
+        const render = () => {
+            content.innerHTML = '';
+            content.style.cssText = 'display:flex;gap:12px;flex-wrap:wrap;';
+            if (activeTab === 'items') {
+                content.append(
+                    makeColumn('Mochila', depotData?.inventory || [], 'store', 'A mochila está vazia.'),
+                    makeColumn(`Depot · ${depotData?.depot?.length || 0}/${depotData?.maxSlots || 0}`, depotData?.depot || [], 'withdraw', 'O Depot está vazio.')
+                );
+            } else {
+                const team = pokes.filter(poke => poke.team && !String(poke.id).startsWith('team-'));
+                const box = pokes.filter(poke => !poke.team);
+                content.append(
+                    makeColumn('Equipe', team, 'store', 'Nenhum Pokémon na equipe.', true),
+                    makeColumn('Box', box, 'withdraw', 'Nenhum Pokémon no Box.', true)
+                );
+            }
+        };
+
+        backdrop.querySelectorAll('.depot-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                activeTab = tab.dataset.tab;
+                backdrop.querySelectorAll('.depot-tab').forEach(button => button.classList.toggle('active', button === tab));
+                render();
+            });
+        });
+
+        try {
+            [depotData, pokes] = await Promise.all([
+                gameApiRequest('/api/game/depot'),
+                gameSocket ? requestGameEvent('pokes', 'pokes-get', latestPokemon) : Promise.resolve([])
+            ]);
+            status.remove();
+            render();
+        } catch (error) {
+            status.textContent = 'Não foi possível abrir o Depot.';
+            status.style.color = '#f56565';
+            console.error('Falha ao abrir Depot portátil:', error);
+        }
+    }
+
     async function showHuntSellWindow() {
         document.querySelector('.hunt-sell-backdrop')?.remove();
 
@@ -1877,7 +2025,6 @@
             <div class="sell-confirm-modal" style="width:460px; max-width:94vw;">
                 <div class="sell-confirm-title">
                     <span>🛒 Vender itens</span>
-                    <button class="hunt-sell-select-all mk-bulk-btn" type="button" style="margin-left:auto;display:none;">☑ Selecionar tudo</button>
                     <button class="hunt-pokemon-open mk-bulk-btn" type="button" style="margin-left:auto;">🐾 Pokémon</button>
                     <button class="hunt-sell-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
                 </div>
@@ -1885,7 +2032,8 @@
                     <div class="hunt-sell-status" style="color:#a0aec0;text-align:center;padding:16px;">Carregando inventário...</div>
                     <div class="hunt-sell-list"></div>
                     <div class="sell-confirm-footer" style="display:none;">
-                        <button class="sell-confirm-btn yes hunt-sell-submit" type="button">Vender selecionados</button>
+                        <button class="sell-confirm-btn hunt-sell-select-all" type="button">Marcar tudo</button>
+                        <button class="sell-confirm-btn yes hunt-sell-submit" type="button">Vender</button>
                         <button class="sell-confirm-btn no hunt-sell-cancel" type="button">Cancelar</button>
                     </div>
                 </div>
@@ -1983,10 +2131,9 @@
                 status.style.display = '';
                 const eligible = Array.from(list.querySelectorAll('input[type="checkbox"]:not(:disabled)'));
                 selectAll.textContent = eligible.length > 0 && eligible.every(checkbox => checkbox.checked)
-                    ? '☐ Desmarcar tudo'
-                    : '☑ Selecionar tudo';
+                    ? 'Desmarcar tudo'
+                    : 'Marcar tudo';
             };
-            selectAll.style.display = '';
             selectAll.addEventListener('click', () => {
                 const eligible = Array.from(list.querySelectorAll('input[type="checkbox"]:not(:disabled)'));
                 const shouldSelect = eligible.some(checkbox => !checkbox.checked);
@@ -2029,7 +2176,7 @@
                         status.textContent = 'Não foi possível concluir a venda. Tente novamente.';
                         status.style.display = '';
                         submit.disabled = false;
-                        submit.textContent = 'Vender selecionados';
+                        submit.textContent = 'Vender';
                     }
                 };
 
