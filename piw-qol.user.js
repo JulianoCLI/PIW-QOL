@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.2
+// @version      9.9.3
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -94,6 +94,10 @@
     const STORAGE_HA_DROPS = 'script_ha_drops_v1';
     const STORAGE_DEX_FILTER = 'script_dex_filter_v1';
     const STORAGE_DEX_SORT_VALUE = 'script_dex_sort_value_v1';
+    const STORAGE_HUNT_MARKET = 'script_hunt_market_v1';
+    const STORAGE_HUNT_BULK_BUY = 'script_hunt_bulk_buy_v1';
+    const STORAGE_HUNT_SELL = 'script_hunt_sell_v1';
+    const STORAGE_MARK_ENHANCEMENTS = 'script_mark_enhancements_v1';
 
     let isRendering = false;
     const globalCreatureApiData = new Map();
@@ -111,6 +115,73 @@
             "'": '&#039;'
         })[char]);
     }
+
+    function getGameLanguage() {
+        const candidates = [
+            localStorage.getItem('i18nextLng'),
+            localStorage.getItem('pokeweb:language'),
+            localStorage.getItem('language'),
+            localStorage.getItem('locale'),
+            document.documentElement.lang,
+            navigator.language
+        ].filter(Boolean);
+        const detected = candidates
+            .map(value => String(value).replace(/^["']|["']$/g, ''))
+            .find(value => /^(?:pt|en)(?:-|_|$)/i.test(value));
+        return /^pt(?:-|_|$)/i.test(detected || '') ? 'pt' : 'en';
+    }
+
+    const SCRIPT_I18N = {
+        pt: {
+            scriptMods: 'Mods do Script', modSettings: 'Configurações do Mod',
+            enabled: 'Ligado', disabled: 'Desligado', simplifiedMap: 'Mapa simplificado',
+            simplifiedMapDesc: 'Ativa a lista limpa ou restaura o mapa gráfico nativo.',
+            dropsPreview: 'Visualização dos drops', dropsPreviewDesc: 'Escolha como ver os itens na lista do mapa.',
+            hidden: 'Oculto', icon: 'Ícone (?)', navAction: 'Ação do botão de teleporte',
+            navActionDesc: 'Define a ação do botão de teleporte na barra do jogo.', favorite: 'Favorita', last: 'Última',
+            chatInterface: 'Interface do chat', chatInterfaceDesc: 'Exibe ou oculta a janela de chat.',
+            show: 'Exibir', hide: 'Ocultar', dexFastTravelDesc: 'Exibe o Fast Travel na Pokédex.',
+            enableDexFastTravel: 'Habilitar ⚡ Fast Travel na Pokédex', selectAllGuards: 'Proteções do Selecionar tudo',
+            selectAllGuardsDesc: 'Proteções aplicadas ao selecionar tudo nas abas.',
+            protectLegendary: 'Desmarcar Pokémon lendários (aba Pokémon)', protectLocked: 'Desmarcar itens com cadeado (aba Loja)',
+            sellConfirmation: 'Itens com confirmação de venda',
+            huntFeatures: 'Recursos da Hunt', huntFeaturesDesc: 'Escolha quais melhorias aparecem enquanto estiver em uma hunt.',
+            marketHud: 'HUD do Mercado Global', marketHudDesc: 'Consulta anúncios sem precisar sair da hunt.',
+            bulkBuy: 'Compras +1.000/+10.000', bulkBuyDesc: 'Adiciona quantidades grandes à loja de Poké Bolas.',
+            huntSell: 'Venda na Hunt', huntSellDesc: 'Permite vender itens e Pokémon pela loja da hunt.',
+            cityMark: 'Melhorias do Mark', cityMarkDesc: 'Quantidades, cadeados e confirmações na loja da cidade.',
+            globalMarket: 'Mercado Global', items: 'Itens', pokemon: 'Pokémon', refresh: 'Atualizar',
+            search: 'Buscar...', loading: 'Carregando anúncios…', noListings: 'Nenhum anúncio encontrado.',
+            loadFailed: 'Não foi possível carregar o mercado.', seller: 'Vendedor', quantity: 'Quantidade',
+            price: 'Preço', selectItems: 'Selecionar itens ▾', protectedItems: 'Itens protegidos. Busque ao lado para adicionar.',
+            noProtected: 'Nenhum item protegido', noItemFound: 'Nenhum item encontrado'
+        },
+        en: {
+            scriptMods: 'Script Mods', modSettings: 'Mod Settings',
+            enabled: 'Enabled', disabled: 'Disabled', simplifiedMap: 'Simplified Map',
+            simplifiedMapDesc: 'Enables the clean list or restores the native graphical map.',
+            dropsPreview: 'Drops Preview', dropsPreviewDesc: 'Choose how items appear in the map list.',
+            hidden: 'Hidden', icon: 'Icon (?)', navAction: 'Teleport Button Action',
+            navActionDesc: 'Defines the teleport button action in the game dock.', favorite: 'Favorite', last: 'Last',
+            chatInterface: 'Chat Interface', chatInterfaceDesc: 'Shows or hides the chat window.',
+            show: 'Show', hide: 'Hide', dexFastTravelDesc: 'Shows the Fast Travel option in the Pokédex.',
+            enableDexFastTravel: 'Enable ⚡ Fast Travel in the Pokédex', selectAllGuards: 'Select All Guards',
+            selectAllGuardsDesc: 'Protections applied when using Select All in tabs.',
+            protectLegendary: 'Deselect legendary Pokémon (Pokémon tab)', protectLocked: 'Deselect locked items (Shop tab)',
+            sellConfirmation: 'Sell Confirmation Items',
+            huntFeatures: 'Hunt Features', huntFeaturesDesc: 'Choose which enhancements are available while inside a hunt.',
+            marketHud: 'Global Market HUD', marketHudDesc: 'Browse listings without leaving the hunt.',
+            bulkBuy: '+1,000/+10,000 purchases', bulkBuyDesc: 'Adds large quantities to the Poké Ball shop.',
+            huntSell: 'Hunt Selling', huntSellDesc: 'Sell items and Pokémon from the hunt shop.',
+            cityMark: 'Mark Enhancements', cityMarkDesc: 'Quantities, locks and confirmations in the city shop.',
+            globalMarket: 'Global Market', items: 'Items', pokemon: 'Pokémon', refresh: 'Refresh',
+            search: 'Search...', loading: 'Loading listings…', noListings: 'No listings found.',
+            loadFailed: 'Could not load the market.', seller: 'Seller', quantity: 'Quantity',
+            price: 'Price', selectItems: 'Select items ▾', protectedItems: 'Protected items. Search to add more.',
+            noProtected: 'No protected items', noItemFound: 'No item found'
+        }
+    };
+    function tr(key) { return SCRIPT_I18N[getGameLanguage()][key] || SCRIPT_I18N.en[key] || key; }
 
     function readStoredJSON(key, fallback) {
         const stored = localStorage.getItem(key);
@@ -605,7 +676,7 @@
 
     function getSellConfirmItems() {
         const items = readStoredJSON(STORAGE_SELL_CONFIRM, ['Strange Pheromone', 'Rare Pokémon Picture']);
-        return items.includes('Bronze Boss Token') ? items : [...items, 'Bronze Boss Token'];
+        return [...new Set([...items, 'Bronze Boss Token', 'Boss Bronze Token'])];
     }
     function setSellConfirmItems(items) {
         localStorage.setItem(STORAGE_SELL_CONFIRM, JSON.stringify(items));
@@ -640,6 +711,14 @@
     function setDexFilter(val) { localStorage.setItem(STORAGE_DEX_FILTER, val); }
     function isDexSortedByValue() { return localStorage.getItem(STORAGE_DEX_SORT_VALUE) === 'true'; }
     function setDexSortedByValue(val) { localStorage.setItem(STORAGE_DEX_SORT_VALUE, val ? 'true' : 'false'); }
+    function isHuntMarketActive() { return localStorage.getItem(STORAGE_HUNT_MARKET) !== 'false'; }
+    function setHuntMarketActive(val) { localStorage.setItem(STORAGE_HUNT_MARKET, val ? 'true' : 'false'); }
+    function isHuntBulkBuyActive() { return localStorage.getItem(STORAGE_HUNT_BULK_BUY) !== 'false'; }
+    function setHuntBulkBuyActive(val) { localStorage.setItem(STORAGE_HUNT_BULK_BUY, val ? 'true' : 'false'); }
+    function isHuntSellActive() { return localStorage.getItem(STORAGE_HUNT_SELL) !== 'false'; }
+    function setHuntSellActive(val) { localStorage.setItem(STORAGE_HUNT_SELL, val ? 'true' : 'false'); }
+    function isMarkEnhancementsActive() { return localStorage.getItem(STORAGE_MARK_ENHANCEMENTS) !== 'false'; }
+    function setMarkEnhancementsActive(val) { localStorage.setItem(STORAGE_MARK_ENHANCEMENTS, val ? 'true' : 'false'); }
 
     function applyMapScriptState() {
         const active = isScriptMapActive();
@@ -860,7 +939,7 @@
         const modsTab = document.createElement('button');
         modsTab.className = 'cfg-tab cfg-tab-mods';
         modsTab.type = 'button';
-        modsTab.textContent = 'Script Mods';
+        modsTab.textContent = tr('scriptMods');
 
         let originalContent = cfgBody.querySelector('.cfg-original-content');
         if (!originalContent) {
@@ -889,92 +968,109 @@
 
             modsContent.innerHTML = `
                 <div style="padding: 10px; display: flex; flex-direction: column; gap: 12px; background: #0c161f; border-radius: 8px;">
-                    <div style="font-size: 16px; font-weight: bold; color: #63b3ed; border-bottom: 1px solid #1a2d3a; padding-bottom: 8px; margin-bottom: 4px;">Configurações do Mod</div>
+                    <div style="font-size: 16px; font-weight: bold; color: #63b3ed; border-bottom: 1px solid #1a2d3a; padding-bottom: 8px; margin-bottom: 4px;">${tr('modSettings')}</div>
                     
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
-                            <b style="color: #e2e8f0; font-size: 14px;">Simplified Map Mode</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Ativa a lista limpa ou restaura o mapa gráfico nativo</span>
+                            <b style="color: #e2e8f0; font-size: 14px;">${tr('simplifiedMap')}</b>
+                            <span style="color: #a0aec0; font-size: 11px;">${tr('simplifiedMapDesc')}</span>
                         </div>
                         <div class="cfg-seg" style="display: flex; gap: 4px;">
-                            <button class="cfg-seg-btn ${mapActive ? 'on' : ''} btn-map-on" type="button" style="flex:1;">Ligado</button>
-                            <button class="cfg-seg-btn ${!mapActive ? 'on' : ''} btn-map-off" type="button" style="flex:1;">Desligado</button>
+                            <button class="cfg-seg-btn ${mapActive ? 'on' : ''} btn-map-on" type="button" style="flex:1;">${tr('enabled')}</button>
+                            <button class="cfg-seg-btn ${!mapActive ? 'on' : ''} btn-map-off" type="button" style="flex:1;">${tr('disabled')}</button>
                         </div>
                     </div>
 
                     <div class="cfg-row ${!mapActive ? 'mod-disabled' : ''}" id="sub-map-feature-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
-                            <b style="color: #e2e8f0; font-size: 14px;">Drops Preview Mode</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Como ver itens na lista do mapa</span>
+                            <b style="color: #e2e8f0; font-size: 14px;">${tr('dropsPreview')}</b>
+                            <span style="color: #a0aec0; font-size: 11px;">${tr('dropsPreviewDesc')}</span>
                         </div>
                         <div class="cfg-seg" style="display: flex; gap: 4px;">
                             <button class="cfg-seg-btn ${dropMode === 'hover' ? 'on' : ''} btn-drop-hover" type="button" style="flex:1;">Hover</button>
-                            <button class="cfg-seg-btn ${dropMode === 'icon' ? 'on' : ''} btn-drop-icon" type="button" style="flex:1;">Ícone (?)</button>
-                            <button class="cfg-seg-btn ${dropMode === 'off' ? 'on' : ''} btn-drop-off" type="button" style="flex:1;">Oculto</button>
+                            <button class="cfg-seg-btn ${dropMode === 'icon' ? 'on' : ''} btn-drop-icon" type="button" style="flex:1;">${tr('icon')}</button>
+                            <button class="cfg-seg-btn ${dropMode === 'off' ? 'on' : ''} btn-drop-off" type="button" style="flex:1;">${tr('hidden')}</button>
                         </div>
                     </div>
 
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
-                            <b style="color: #e2e8f0; font-size: 14px;">Nav Dock Button Action</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Ação do botão de teleport na barra do jogo</span>
+                            <b style="color: #e2e8f0; font-size: 14px;">${tr('navAction')}</b>
+                            <span style="color: #a0aec0; font-size: 11px;">${tr('navActionDesc')}</span>
                         </div>
                         <div class="cfg-seg" style="display: flex; gap: 4px;">
-                            <button class="cfg-seg-btn ${navMode === 'fav' ? 'on' : ''} btn-nav-fav" type="button" style="flex:1;">★ Favorita</button>
-                            <button class="cfg-seg-btn ${navMode === 'last' ? 'on' : ''} btn-nav-last" type="button" style="flex:1;">↺ Última</button>
+                            <button class="cfg-seg-btn ${navMode === 'fav' ? 'on' : ''} btn-nav-fav" type="button" style="flex:1;">★ ${tr('favorite')}</button>
+                            <button class="cfg-seg-btn ${navMode === 'last' ? 'on' : ''} btn-nav-last" type="button" style="flex:1;">↺ ${tr('last')}</button>
                         </div>
                     </div>
 
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
-                            <b style="color: #e2e8f0; font-size: 14px;">Chat Interface</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Exibe ou oculta a janela de chat</span>
+                            <b style="color: #e2e8f0; font-size: 14px;">${tr('chatInterface')}</b>
+                            <span style="color: #a0aec0; font-size: 11px;">${tr('chatInterfaceDesc')}</span>
                         </div>
                         <div class="cfg-seg" style="display: flex; gap: 4px;">
-                            <button class="cfg-seg-btn ${chatActiveState ? 'on' : ''} btn-chat-on" type="button" style="flex:1;">Exibir</button>
-                            <button class="cfg-seg-btn ${!chatActiveState ? 'on' : ''} btn-chat-off" type="button" style="flex:1;">Ocultar</button>
+                            <button class="cfg-seg-btn ${chatActiveState ? 'on' : ''} btn-chat-on" type="button" style="flex:1;">${tr('show')}</button>
+                            <button class="cfg-seg-btn ${!chatActiveState ? 'on' : ''} btn-chat-off" type="button" style="flex:1;">${tr('hide')}</button>
                         </div>
                     </div>
 
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
                             <b style="color: #e2e8f0; font-size: 14px;">Pokédex Fast Travel</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Exibe o toggle de Fast Travel na Pokédex</span>
+                            <span style="color: #a0aec0; font-size: 11px;">${tr('dexFastTravelDesc')}</span>
                         </div>
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 0;">
                             <input type="checkbox" class="btn-dex-ft" ${isDexFastTravelActive() ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#3182ce;">
-                            <span style="color:#a0aec0; font-size:12px;">Habilitar ⚡ Fast Travel na Pokédex</span>
+                            <span style="color:#a0aec0; font-size:12px;">${tr('enableDexFastTravel')}</span>
                         </label>
                     </div>
 
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
-                            <b style="color: #e2e8f0; font-size: 14px;">Select All Guards</b>
-                            <span style="color: #a0aec0; font-size: 11px;">Proteções ao clicar em Select All nas abas</span>
+                            <b style="color: #e2e8f0; font-size: 14px;">${tr('selectAllGuards')}</b>
+                            <span style="color: #a0aec0; font-size: 11px;">${tr('selectAllGuardsDesc')}</span>
                         </div>
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 0;">
                             <input type="checkbox" class="btn-guard-leg" ${isGuardLegendaryActive() ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#3182ce;">
-                            <span style="color:#a0aec0; font-size:12px;">Desmarcar Pokémons Lendários (Aba Pokémon)</span>
+                            <span style="color:#a0aec0; font-size:12px;">${tr('protectLegendary')}</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 0;">
                             <input type="checkbox" class="btn-guard-lock" ${isGuardSellLockActive() ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; accent-color:#3182ce;">
-                            <span style="color:#a0aec0; font-size:12px;">Desmarcar Itens com Cadeado (Aba Loja)</span>
+                            <span style="color:#a0aec0; font-size:12px;">${tr('protectLocked')}</span>
                         </label>
+                    </div>
+
+                    <div class="cfg-row" style="background:#14222d;padding:10px;border-radius:6px;border:1px solid #1a2d3a;margin:0;">
+                        <div class="cfg-label" style="margin-bottom:8px;">
+                            <b style="color:#e2e8f0;font-size:14px;">${tr('huntFeatures')}</b>
+                            <span style="color:#a0aec0;font-size:11px;">${tr('huntFeaturesDesc')}</span>
+                        </div>
+                        ${[
+                            ['btn-hunt-market', isHuntMarketActive(), tr('marketHud'), tr('marketHudDesc')],
+                            ['btn-hunt-bulk', isHuntBulkBuyActive(), tr('bulkBuy'), tr('bulkBuyDesc')],
+                            ['btn-hunt-sell', isHuntSellActive(), tr('huntSell'), tr('huntSellDesc')],
+                            ['btn-mark-enhancements', isMarkEnhancementsActive(), tr('cityMark'), tr('cityMarkDesc')]
+                        ].map(([className, checked, title, description]) => `
+                            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:5px 0;">
+                                <input type="checkbox" class="${className}" ${checked ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;accent-color:#3182ce;">
+                                <span><b style="display:block;color:#e2e8f0;font-size:12px;">${title}</b><small style="color:#a0aec0;">${description}</small></span>
+                            </label>`).join('')}
                     </div>
 
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0; display:flex; gap:12px; align-items:flex-start;">
                         <div class="cfg-label" style="flex:1;">
-                            <b style="color: #e2e8f0; font-size: 14px;">Sell Confirmation Items</b>
-                            <span style="color: #a0aec0; font-size: 11px; display:block; margin-top:4px;">Itens protegidos. Busque ao lado para adicionar.</span>
+                            <b style="color: #e2e8f0; font-size: 14px;">${tr('sellConfirmation')}</b>
+                            <span style="color: #a0aec0; font-size: 11px; display:block; margin-top:4px;">${tr('protectedItems')}</span>
                         </div>
                         
                         <div id="cfg-sell-selected-list" style="flex:1; display:flex; flex-direction:column; gap:4px; max-height:120px; overflow-y:auto; padding-right:4px;">
                         </div>
                         
                         <div style="flex:1; position:relative; min-width:180px;">
-                            <button type="button" id="cfg-sell-dd-btn" style="width:100%; text-align:left; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; padding:6px 10px; border-radius:4px; cursor:pointer;">Selecionar Itens ▾</button>
+                            <button type="button" id="cfg-sell-dd-btn" style="width:100%; text-align:left; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; padding:6px 10px; border-radius:4px; cursor:pointer;">${tr('selectItems')}</button>
                             <div id="cfg-sell-dropdown-menu" style="display:none; position:absolute; top:100%; right:0; width:100%; background:#14222d; border:1px solid #273f52; border-radius:4px; z-index:10; box-shadow:0 4px 6px rgba(0,0,0,0.3); margin-top:4px; padding:6px; box-sizing:border-box;">
-                                <input type="text" id="cfg-sell-search" placeholder="Buscar..." style="width:100%; box-sizing:border-box; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; border-radius:4px; padding:6px; outline:none; margin-bottom:6px;">
+                                <input type="text" id="cfg-sell-search" placeholder="${tr('search')}" style="width:100%; box-sizing:border-box; background:#0c161f; color:#e2e8f0; border:1px solid #273f52; border-radius:4px; padding:6px; outline:none; margin-bottom:6px;">
                                 <div id="cfg-sell-dropdown" style="max-height:150px; overflow-y:auto;">
                                 </div>
                             </div>
@@ -1014,6 +1110,25 @@
             modsContent.querySelector('.btn-guard-lock').addEventListener('change', (e) => {
                 setGuardSellLock(e.target.checked);
             });
+            modsContent.querySelector('.btn-hunt-market').addEventListener('change', e => {
+                setHuntMarketActive(e.target.checked);
+                if (e.target.checked) injectHuntMarketButton();
+                else {
+                    document.querySelector('.hunt-market-open')?.remove();
+                    document.querySelector('.script-market-backdrop')?.remove();
+                }
+            });
+            modsContent.querySelector('.btn-hunt-bulk').addEventListener('change', e => {
+                setHuntBulkBuyActive(e.target.checked);
+                const ballWindow = document.querySelector('.ball-window');
+                if (ballWindow) injectHuntBallEnhancements(ballWindow);
+            });
+            modsContent.querySelector('.btn-hunt-sell').addEventListener('change', e => {
+                setHuntSellActive(e.target.checked);
+                const ballWindow = document.querySelector('.ball-window');
+                if (ballWindow) injectHuntBallEnhancements(ballWindow);
+            });
+            modsContent.querySelector('.btn-mark-enhancements').addEventListener('change', e => setMarkEnhancementsActive(e.target.checked));
 
             const selectedListEl = modsContent.querySelector('#cfg-sell-selected-list');
             const ddBtn = modsContent.querySelector('#cfg-sell-dd-btn');
@@ -1060,7 +1175,7 @@
                 const items = getSellConfirmItems();
                 selectedListEl.innerHTML = '';
                 if (items.length === 0) {
-                    selectedListEl.innerHTML = '<span style="color:#718096; font-size:12px; margin:auto;">Nenhum item protegido</span>';
+                    selectedListEl.innerHTML = `<span style="color:#718096; font-size:12px; margin:auto;">${tr('noProtected')}</span>`;
                 } else {
                     items.forEach(itemName => {
                         const iconHTML = resolveItemIcon(itemName);
@@ -1097,7 +1212,7 @@
                 const toShow = filtered.slice(0, 50);
 
                 if (toShow.length === 0) {
-                    dropdownEl.innerHTML = '<div style="padding:6px; color:#718096; font-size:12px; text-align:center;">Nenhum item encontrado</div>';
+                    dropdownEl.innerHTML = `<div style="padding:6px; color:#718096; font-size:12px; text-align:center;">${tr('noItemFound')}</div>`;
                     return;
                 }
                 
@@ -1870,6 +1985,117 @@
         }
     }
 
+    function getMarketListings(payload) {
+        if (Array.isArray(payload)) return payload;
+        for (const key of ['listings', 'items', 'results', 'offers', 'data']) {
+            if (Array.isArray(payload?.[key])) return payload[key];
+            if (payload?.[key] && payload[key] !== payload) {
+                const nested = getMarketListings(payload[key]);
+                if (nested.length) return nested;
+            }
+        }
+        return [];
+    }
+
+    function showGlobalMarketWindow() {
+        document.querySelector('.script-market-backdrop')?.remove();
+        const backdrop = document.createElement('div');
+        backdrop.className = 'script-market-backdrop';
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;';
+        backdrop.innerHTML = `
+            <div class="mk-window script-market-window" style="width:min(760px,95vw);height:min(620px,88vh);display:flex;flex-direction:column;background:#0c161f;border:1px solid #2b4c66;border-radius:10px;box-shadow:0 16px 50px rgba(0,0,0,.75);">
+                <div class="mk-head" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #1a2d3a;">
+                    <b style="flex:1;color:#e2e8f0;">🌐 ${tr('globalMarket')}</b>
+                    <button class="mk-bulk-btn market-refresh" type="button">↻ ${tr('refresh')}</button>
+                    <button class="cfg-x market-close" type="button" aria-label="Close">×</button>
+                </div>
+                <div style="display:flex;gap:6px;padding:10px 12px 0;">
+                    <button class="mk-bulk-btn market-tab on" data-category="item" type="button">${tr('items')}</button>
+                    <button class="mk-bulk-btn market-tab" data-category="pokemon" type="button">${tr('pokemon')}</button>
+                    <input class="market-search" type="search" placeholder="${tr('search')}" style="margin-left:auto;min-width:220px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
+                </div>
+                <div class="market-status" style="padding:7px 12px;color:#a0aec0;font-size:12px;"></div>
+                <div class="market-list" style="padding:0 12px 12px;overflow:auto;display:grid;gap:7px;"></div>
+            </div>`;
+        document.body.appendChild(backdrop);
+
+        let activeCategory = 'item';
+        let currentListings = [];
+        const list = backdrop.querySelector('.market-list');
+        const status = backdrop.querySelector('.market-status');
+        const search = backdrop.querySelector('.market-search');
+        const close = () => backdrop.remove();
+
+        const render = () => {
+            const query = search.value.trim().toLocaleLowerCase();
+            const filtered = currentListings.filter(entry => {
+                const ref = entry.item || entry.pokemon || entry.product || {};
+                const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '';
+                return !query || String(name).toLocaleLowerCase().includes(query);
+            });
+            list.innerHTML = '';
+            status.textContent = filtered.length ? `${filtered.length} ${activeCategory === 'item' ? tr('items') : tr('pokemon')}` : tr('noListings');
+            filtered.forEach(entry => {
+                const ref = entry.item || entry.pokemon || entry.product || {};
+                const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '—';
+                const price = Number(entry.price ?? entry.totalPrice ?? entry.value ?? 0);
+                const quantity = Number(entry.quantity ?? entry.qty ?? entry.amount ?? 1);
+                const seller = entry.sellerName || entry.seller?.name || entry.ownerName || entry.owner?.name || '—';
+                const quality = entry.quality ?? ref.quality;
+                const iv = entry.iv ?? entry.ivPercent ?? ref.iv ?? ref.ivPercent;
+                const row = document.createElement('div');
+                row.style.cssText = 'display:grid;grid-template-columns:minmax(150px,1fr) auto auto;gap:12px;align-items:center;background:#14222d;border:1px solid #1f3545;border-radius:7px;padding:9px 11px;color:#e2e8f0;';
+                const details = [quality != null ? `Q: ${quality}` : '', iv != null ? `IV: ${iv}${String(iv).includes('%') ? '' : '%'}` : ''].filter(Boolean).join(' · ');
+                row.innerHTML = `
+                    <div><b>${escapeHTML(name)}</b>${details ? `<small style="display:block;color:#90cdf4;margin-top:2px;">${escapeHTML(details)}</small>` : ''}<small style="display:block;color:#718096;">${tr('seller')}: ${escapeHTML(seller)}</small></div>
+                    <span style="color:#a0aec0;">${tr('quantity')}: <b style="color:#e2e8f0;">${quantity.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}</b></span>
+                    <b style="color:#f6c453;">💲 ${price.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}</b>`;
+                list.appendChild(row);
+            });
+        };
+
+        const load = async () => {
+            status.textContent = tr('loading');
+            list.innerHTML = '';
+            try {
+                const payload = await gameApiRequest(`/api/game/market?category=${encodeURIComponent(activeCategory)}`);
+                currentListings = getMarketListings(payload);
+                render();
+            } catch (error) {
+                console.warn('Falha ao carregar o mercado global:', error);
+                status.textContent = `${tr('loadFailed')} ${error.message || ''}`.trim();
+            }
+        };
+        backdrop.querySelector('.market-close').addEventListener('click', close);
+        backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
+        backdrop.querySelector('.market-refresh').addEventListener('click', load);
+        backdrop.querySelectorAll('.market-tab').forEach(tab => tab.addEventListener('click', () => {
+            activeCategory = tab.dataset.category;
+            backdrop.querySelectorAll('.market-tab').forEach(button => button.classList.toggle('on', button === tab));
+            load();
+        }));
+        search.addEventListener('input', render);
+        load();
+    }
+
+    function injectHuntMarketButton() {
+        const captureBar = document.querySelector('[data-guide="capture-bar"]');
+        if (!captureBar || !isHuntMarketActive() || captureBar.querySelector('.hunt-market-open')) return;
+        const anchor = captureBar.querySelector('.cap-shop-link');
+        if (!anchor) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `${anchor.className} hunt-market-open`;
+        button.textContent = `🌐 ${tr('globalMarket')}`;
+        button.title = tr('marketHudDesc');
+        button.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            showGlobalMarketWindow();
+        });
+        anchor.after(button);
+    }
+
     let ballCatalogPromise = null;
 
     function loadBallCatalog() {
@@ -1886,7 +2112,8 @@
         if (!ballWindow) return;
 
         const header = ballWindow.querySelector('.ball-head');
-        if (header && !header.querySelector('.hunt-sell-open')) {
+        if (!isHuntSellActive()) header?.querySelector('.hunt-sell-open')?.remove();
+        if (header && isHuntSellActive() && !header.querySelector('.hunt-sell-open')) {
             const sellButton = document.createElement('button');
             sellButton.type = 'button';
             sellButton.className = 'mk-bulk-btn hunt-sell-open';
@@ -1899,6 +2126,11 @@
             header.querySelector('.cfg-x')?.before(sellButton);
         }
 
+        if (!isHuntBulkBuyActive()) {
+            ballWindow.querySelectorAll('.script-hunt-bulk').forEach(button => button.remove());
+            ballWindow.querySelectorAll('.ball-actions').forEach(actions => delete actions.dataset.bulkEnhanced);
+            return;
+        }
         ballWindow.querySelectorAll('.ball-row').forEach(row => {
             const actions = row.querySelector('.ball-actions');
             const ballName = row.querySelector('.ball-name')?.textContent?.trim();
@@ -1907,7 +2139,7 @@
             [1000, 10000].forEach(quantity => {
                 const button = document.createElement('button');
                 button.type = 'button';
-                button.className = 'ball-buy';
+                button.className = 'ball-buy script-hunt-bulk';
                 button.textContent = `+${quantity.toLocaleString('pt-BR')}`;
                 button.addEventListener('click', async () => {
                     button.disabled = true;
@@ -2676,7 +2908,8 @@
             injectQuickTPButton();
             if (document.querySelector('.cfg-window')) injectConfigTab();
             applyChatState();
-            if (document.querySelector('.mk-window')) injectShopEnhancements();
+            injectHuntMarketButton();
+            if (document.querySelector('.mk-window') && isMarkEnhancementsActive()) injectShopEnhancements();
             if (document.querySelector('.ball-window')) injectHuntBallEnhancements(document.querySelector('.ball-window'));
             if (document.querySelector('.dex-window')) injectDexEnhancements();
             if (document.querySelector('.ha-window:not(.ha-compare-modal)')) trackHuntAnalyzer();
