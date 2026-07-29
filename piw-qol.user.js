@@ -32,10 +32,100 @@
     let isRendering = false;
     const globalCreatureApiData = new Map();
     const globalItemApiData = new Map();
+    const globalHuntMarkerData = new Map();
+    let mapMarkersLoadPromise = null;
+
+    function escapeHTML(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        })[char]);
+    }
+
+    function readStoredJSON(key, fallback) {
+        const stored = localStorage.getItem(key);
+        if (!stored) return fallback;
+        try {
+            const parsed = JSON.parse(stored);
+            return Array.isArray(parsed) ? parsed : fallback;
+        } catch (error) {
+            console.warn(`Falha ao ler a configuração "${key}". O valor padrão será usado.`, error);
+            return fallback;
+        }
+    }
+
+    function parseGameNumber(value) {
+        const text = String(value ?? '').trim().toLowerCase();
+        const abbreviated = text.match(/(-?\d+(?:[.,]\d+)?)\s*([kmb])\b/);
+        if (abbreviated) {
+            const number = Number(abbreviated[1].replace(',', '.'));
+            const multipliers = { k: 1e3, m: 1e6, b: 1e9 };
+            return Number.isFinite(number) ? Math.round(number * multipliers[abbreviated[2]]) : 0;
+        }
+        const digits = text.replace(/[^0-9-]/g, '');
+        const parsed = parseInt(digits, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function refreshDexEnhancements() {
+        const dexWindow = document.querySelector('.dex-window');
+        if (!dexWindow) return;
+        const controls = dexWindow.querySelector('.dex-script-controls');
+        if (controls) controls.remove();
+        injectDexEnhancements();
+    }
 
     // URLs oficiais do jogo
     const POKEMON_TYPES_JSON_URL = 'https://poke.idleworld.online/game/creatures.json';
     const ITEMS_JSON_URL = 'https://poke.idleworld.online/game/items.json';
+    const MAP_MARKERS_API_URL = '/api/game/map-markers';
+
+    function getMarkerName(marker) {
+        return String(
+            marker?.name || marker?.title || marker?.huntName || marker?.pokemonName ||
+            marker?.creatureName || marker?.pokemon?.name || marker?.creature?.name || ''
+        ).trim();
+    }
+
+    function getMarkerSlug(marker) {
+        return String(marker?.slug || marker?.huntSlug || marker?.hunt?.slug || '').trim();
+    }
+
+    function indexHuntMarkers(payload) {
+        const content = Array.isArray(payload) ? payload : (payload?.markers || payload?.hunts || payload?.data || []);
+        const markers = Array.isArray(content) ? content : (content?.markers || content?.hunts || []);
+
+        globalHuntMarkerData.clear();
+        markers.forEach(marker => {
+            if (!marker || typeof marker !== 'object') return;
+            const name = getMarkerName(marker);
+            const slug = getMarkerSlug(marker);
+            if (name) globalHuntMarkerData.set(getCleanHuntName(name), marker);
+            if (slug) globalHuntMarkerData.set(slug.toLowerCase(), marker);
+        });
+    }
+
+    function loadMapMarkersData(force = false) {
+        if (!force && mapMarkersLoadPromise) return mapMarkersLoadPromise;
+        mapMarkersLoadPromise = fetch(MAP_MARKERS_API_URL, { credentials: 'same-origin' })
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
+            .then(payload => {
+                indexHuntMarkers(payload);
+                refreshDexEnhancements();
+                return globalHuntMarkerData;
+            })
+            .catch(error => {
+                console.warn('⚠️ Falha ao carregar os marcadores do mapa; usando o DOM como fallback.', error);
+                return globalHuntMarkerData;
+            });
+        return mapMarkersLoadPromise;
+    }
 
     // --- TABELA COMPACTA DE TIPOS POKÉMON ---
     const TYPE_CHART = {
@@ -91,6 +181,7 @@
                     });
                     POKEMON_TYPES = { ...BASE_POKEMON_TYPES, ...fetchedTypes };
                     buildSimpleList();
+                    refreshDexEnhancements();
                 }
             }
         } catch (e) {
@@ -114,6 +205,7 @@
                     if (itemId) globalItemApiData.set(itemId, item);
                 });
                 buildSimpleList();
+                refreshDexEnhancements();
             }
         } catch (e) {
             console.warn("⚠️ Falha ao carregar items.json", e);
@@ -122,6 +214,7 @@
 
     loadExternalPokemonData();
     loadExternalItemData();
+    loadMapMarkersData();
 
     function applyOutlandModifier(baseMultiplier) {
         if (baseMultiplier === 1.5) return 1.75;
@@ -189,7 +282,7 @@
             if (imgPath) {
                 // Se o caminho for relativo, constrói a URL correta com base no domínio
                 const fullImgUrl = imgPath.startsWith('http') ? imgPath : `https://poke.idleworld.online/${imgPath.startsWith('/') ? imgPath.slice(1) : imgPath}`;
-                return `<img src="${fullImgUrl}" style="width:20px; height:20px; vertical-align:middle; margin-right:8px; object-fit:contain;" />`;
+                return `<img src="${escapeHTML(fullImgUrl)}" style="width:20px; height:20px; vertical-align:middle; margin-right:8px; object-fit:contain;" />`;
             }
         }
 
@@ -210,7 +303,7 @@
                     const directImg = d.image || d.icon || d.sprite || d.img || '';
                     if (directImg) {
                         const fullUrl = directImg.startsWith('http') ? directImg : `https://poke.idleworld.online/${directImg.startsWith('/') ? directImg.slice(1) : directImg}`;
-                        customImgHTML = `<img src="${fullUrl}" style="width:20px; height:20px; vertical-align:middle; margin-right:8px; object-fit:contain;" />`;
+                        customImgHTML = `<img src="${escapeHTML(fullUrl)}" style="width:20px; height:20px; vertical-align:middle; margin-right:8px; object-fit:contain;" />`;
                     }
                 } else {
                     itemName = String(d);
@@ -221,14 +314,14 @@
                 return `
                     <div style="display:flex; align-items:center; margin-bottom:6px; font-size:13px; color:#cbd5e0; background:rgba(20,34,45,0.6); padding:4px 8px; border-radius:4px; border:1px solid #1a2d3a;">
                         ${iconHTML}
-                        <span style="font-weight:500; color:#e2e8f0;">${itemName}</span>
+                        <span style="font-weight:500; color:#e2e8f0;">${escapeHTML(itemName)}</span>
                     </div>
                 `;
             }).join('');
         }
 
         if (typeof rawDrops === 'string') {
-            return `<div style="font-size:13px; color:#cbd5e0;">${rawDrops}</div>`;
+            return `<div style="font-size:13px; color:#cbd5e0;">${escapeHTML(rawDrops)}</div>`;
         }
 
         return '';
@@ -246,8 +339,8 @@
 
             for (const key of possiblePriceKeys) {
                 if (pokeObj[key] !== undefined && pokeObj[key] !== null && pokeObj[key] !== '') {
-                    const parsed = parseInt(String(pokeObj[key]).replace(/\D/g, ''), 10);
-                    if (!isNaN(parsed) && parsed > 0) {
+                    const parsed = parseGameNumber(pokeObj[key]);
+                    if (parsed > 0) {
                         priceVal = parsed;
                         break;
                     }
@@ -271,8 +364,8 @@
                 if (priceVal === 0) {
                     const sellEl = mapTip.querySelector('.map-tip-sell b') || mapTip.querySelector('.map-tip-sell');
                     if (sellEl) {
-                        const parsedDom = parseInt(sellEl.textContent.replace(/\D/g, ''), 10);
-                        if (!isNaN(parsedDom) && parsedDom > 0) priceVal = parsedDom;
+                        const parsedDom = parseGameNumber(sellEl.textContent);
+                        if (parsedDom > 0) priceVal = parsedDom;
                     }
                 }
                 if (!dropsHTML) {
@@ -433,17 +526,14 @@
     function setDropMode(mode) { localStorage.setItem(STORAGE_DROP_MODE, mode); buildSimpleList(); }
 
     function getSellConfirmItems() {
-        const stored = localStorage.getItem(STORAGE_SELL_CONFIRM);
-        if (stored) return JSON.parse(stored);
-        return ['Strange Pheromone', 'Rare Pokémon Picture']; // defaults
+        return readStoredJSON(STORAGE_SELL_CONFIRM, ['Strange Pheromone', 'Rare Pokémon Picture']);
     }
     function setSellConfirmItems(items) {
         localStorage.setItem(STORAGE_SELL_CONFIRM, JSON.stringify(items));
     }
 
     function getSellLocks() {
-        const stored = localStorage.getItem(STORAGE_SELL_LOCKS);
-        return stored ? JSON.parse(stored) : [];
+        return readStoredJSON(STORAGE_SELL_LOCKS, []);
     }
     function addSellLock(itemName) {
         const locks = getSellLocks();
@@ -494,8 +584,7 @@
     }
 
     function getFavorites() {
-        const favs = localStorage.getItem(STORAGE_FAVS);
-        return favs ? JSON.parse(favs) : [];
+        return readStoredJSON(STORAGE_FAVS, []);
     }
 
     function toggleFavorite(huntName) {
@@ -516,16 +605,37 @@
         return nameEl ? nameEl.textContent.trim().toLowerCase() : '';
     }
 
+    function findMappedHunt(huntName) {
+        return globalHuntMarkerData.get(getCleanHuntName(huntName)) || null;
+    }
+
+    function clickMappedHunt(huntName) {
+        const mappedHunt = findMappedHunt(huntName);
+        const slug = getMarkerSlug(mappedHunt);
+        if (!slug) return false;
+
+        const guide = `hunt-${slug}`;
+        const marker = Array.from(document.querySelectorAll('[data-guide]'))
+            .find(element => element.dataset.guide === guide);
+        if (!marker) return false;
+
+        marker.click();
+        return true;
+    }
+
     async function teleportToTarget(huntName) {
         if (!huntName) {
             alert('Nenhuma hunt definida!');
             return;
         }
 
+        await loadMapMarkersData();
+
         const mapBtn = document.querySelector('button[data-guide="dock-map"]');
         let mapWindow = document.querySelector('.map-window');
 
-        if (!mapWindow || mapWindow.style.display !== 'block') {
+        const mapIsVisible = mapWindow && getComputedStyle(mapWindow).display !== 'none';
+        if (!mapIsVisible) {
             if (mapBtn) mapBtn.click();
             await new Promise(resolve => setTimeout(resolve, 500));
         }
@@ -536,6 +646,11 @@
             return;
         }
 
+        // Caminho direto confirmado pelo mapa da API: [data-guide="hunt-<slug>"].
+        if (clickMappedHunt(huntName)) return;
+
+        // Compatibilidade com versões do jogo nas quais o marcador da área ainda
+        // não foi montado no DOM.
         let allTabs = Array.from(mapWindow.querySelectorAll('.map-area:not(.locked)'));
         if (allTabs.length === 0) {
             const found = await tryFindMarkerAsync(huntName, 20, 100);
@@ -564,6 +679,12 @@
         return new Promise(resolve => {
             let attempts = 0;
             const interval = setInterval(() => {
+                if (clickMappedHunt(huntName)) {
+                    clearInterval(interval);
+                    resolve(true);
+                    return;
+                }
+
                 const markers = Array.from(document.querySelectorAll('.hunt-marker'));
                 const targetMarker = markers.find(m => {
                     const nameEl = m.querySelector('.hunt-name');
@@ -626,6 +747,8 @@
             updateNavButtonAppearance();
         }
     }
+
+    let configDropdownCloseHandler = null;
 
     function injectConfigTab() {
         const cfgWindow = document.querySelector('.cfg-window');
@@ -808,11 +931,15 @@
                 }
             });
 
-            document.addEventListener('click', (e) => {
+            if (configDropdownCloseHandler) {
+                document.removeEventListener('click', configDropdownCloseHandler);
+            }
+            configDropdownCloseHandler = (e) => {
                 if (!ddMenu.contains(e.target) && e.target !== ddBtn) {
                     ddMenu.style.display = 'none';
                 }
-            });
+            };
+            document.addEventListener('click', configDropdownCloseHandler);
 
             let uniqueItems = null;
 
@@ -1196,7 +1323,7 @@
                 <div class="sell-confirm-body">
                     <p>Você está prestes a vender os seguintes itens de alto valor:</p>
                     <div class="sell-confirm-items">
-                        ${itemNames.map(n => `<div>• ${n}</div>`).join('')}
+                        ${itemNames.map(n => `<div>• ${escapeHTML(n)}</div>`).join('')}
                     </div>
                     <div class="sell-confirm-footer">
                         <button class="sell-confirm-btn yes" type="button">✅ Confirmar Venda</button>
@@ -1395,13 +1522,20 @@
 
         const ftEnabled = isDexFastTravelActive();
 
-        // Build set of hunt-able pokemon names from globalCreatureApiData
+        // A API de marcadores é a fonte confiável para saber quais criaturas
+        // possuem hunt. O catálogo de criaturas permanece como fallback.
         const huntableNames = new Set();
-        for (const [name, data] of globalCreatureApiData.entries()) {
-            if (data.hunts && data.hunts.length > 0) huntableNames.add(name);
-            if (data.hunt) huntableNames.add(name);
-            if (data.area || data.map || data.location) huntableNames.add(name);
-            if (data.slug) huntableNames.add(name);
+        if (globalHuntMarkerData.size > 0) {
+            for (const marker of new Set(globalHuntMarkerData.values())) {
+                const name = getMarkerName(marker);
+                if (name) huntableNames.add(getCleanHuntName(name));
+            }
+        } else {
+            for (const [name, data] of globalCreatureApiData.entries()) {
+                if (data.hunts?.length || data.hunt || data.area || data.map || data.location || data.slug) {
+                    huntableNames.add(name);
+                }
+            }
         }
 
         // Mark cells that have no hunt with a red X badge
@@ -1468,8 +1602,8 @@
                 const possiblePriceKeys = ['sellValue', 'priceNpc', 'sell', 'sellsFor', 'price', 'value', 'gold', 'money', 'cost', 'reward'];
                 for (const key of possiblePriceKeys) {
                     if (pokeObj[key] !== undefined && pokeObj[key] !== null && pokeObj[key] !== '') {
-                        const parsed = parseInt(String(pokeObj[key]).replace(/\D/g, ''), 10);
-                        if (!isNaN(parsed) && parsed > 0) return noHunt ? 99999999 : parsed;
+                        const parsed = parseGameNumber(pokeObj[key]);
+                        if (parsed > 0) return noHunt ? 99999999 : parsed;
                     }
                 }
             }
@@ -1543,9 +1677,10 @@
 
         // Fast Travel: intercept clicks on dex-cell
         const ftCheck = bar.querySelector('.dex-ft-check');
-        if (ftCheck) {
+        if (ftCheck && !grid.dataset.fastTravelIntercepted) {
             grid.addEventListener('click', (e) => {
-                if (!ftCheck.checked) return;
+                const currentFtCheck = dexWindow.querySelector('.dex-ft-check');
+                if (!currentFtCheck?.checked) return;
                 const cell = e.target.closest('.dex-cell');
                 if (!cell) return;
                 e.stopPropagation();
@@ -1554,6 +1689,7 @@
                 if (!pokeName) return;
                 teleportToTarget(pokeName);
             }, true);
+            grid.dataset.fastTravelIntercepted = 'true';
         }
     }
 
@@ -1608,7 +1744,7 @@
                 </div>
                 <div style="padding: 12px;">
                     <table class="ha-compare-table">
-                        <tr><th>Métrica</th><th>${lastTitle}</th><th>${currTitle}</th></tr>
+                        <tr><th>Métrica</th><th>${escapeHTML(lastTitle)}</th><th>${escapeHTML(currTitle)}</th></tr>
                         <tr><td>💰 Balance Total</td><td class="${balLast}">${formatBal(last.balance)}</td><td class="${balCurr}">${formatBal(curr.balance)}</td></tr>
                         <tr><td>📉 Balance/h</td><td class="${balhLast}">${formatBal(last.balHour)}</td><td class="${balhCurr}">${formatBal(curr.balHour)}</td></tr>
                         <tr><td>🌟 XP Gained</td><td class="${xpgLast}">${formatNumber(last.xpGained)}</td><td class="${xpgCurr}">${formatNumber(curr.xpGained)}</td></tr>
@@ -1633,20 +1769,26 @@
             startX = e.clientX;
             startY = e.clientY;
         });
-        document.addEventListener('mousemove', e => {
+        const handleMouseMove = e => {
             if (!isDragging) return;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             modal.style.transform = `translate(${initialX + dx}px, ${initialY + dy}px)`;
-        });
-        document.addEventListener('mouseup', e => {
+        };
+        const handleMouseUp = e => {
             if (!isDragging) return;
             isDragging = false;
             initialX += e.clientX - startX;
             initialY += e.clientY - startY;
-        });
+        };
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
 
-        backdrop.querySelector('.ha-compare-close').addEventListener('click', () => backdrop.remove());
+        backdrop.querySelector('.ha-compare-close').addEventListener('click', () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            backdrop.remove();
+        });
     }
 
     function trackHuntAnalyzer() {
@@ -1697,7 +1839,9 @@
             }
         }
 
-        if (currentCatch > capturesCount) {
+        if (!currentHuntSnapshot) {
+            capturesCount = currentCatch;
+        } else if (currentCatch > capturesCount) {
             capturesCount = currentCatch;
             lastCatchTimestamp = Date.now();
             ballsAtLastCatch = currentBalls;
@@ -1722,7 +1866,7 @@
                 const diffM = Math.floor(diffMs / 60000);
                 const timeStr = diffM > 0 ? `há ${diffM}m` : 'agora';
                 const dateStr = new Date(lastCatchTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                const ballsSpent = currentBalls - ballsAtLastCatch;
+                const ballsSpent = Math.max(0, ballsAtLastCatch - currentBalls);
                 const newText = `🔴 Último catch: ${dateStr} (${timeStr}) • ${ballsSpent} balls`;
                 if (catchStats.textContent !== newText) {
                     catchStats.textContent = newText;
