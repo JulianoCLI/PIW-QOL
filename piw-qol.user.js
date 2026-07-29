@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.10.0
+// @version      9.10.3
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -28,7 +28,10 @@
             return;
         }
         if (message?.type === 'inventory') latestInventory = message.items || [];
-        if (message?.type === 'pokes') latestPokemon = message.list || [];
+        if (message?.type === 'pokes') {
+            latestPokemon = message.list || [];
+            setTimeout(enhanceCaptureLog, 0);
+        }
         const waiters = gameEventWaiters.get(message?.type);
         if (waiters) {
             gameEventWaiters.delete(message.type);
@@ -100,6 +103,7 @@
     const STORAGE_MARK_ENHANCEMENTS = 'script_mark_enhancements_v1';
     const STORAGE_MAP_FILTERS = 'script_map_filters_v1';
     const STORAGE_HA_HISTORY = 'script_ha_history_v1';
+    const STORAGE_PRIMARY_FAVORITE = 'script_primary_favorite_v1';
 
     let isRendering = false;
     let cachedTrainerLevel = null;
@@ -236,6 +240,30 @@
 
     function setMapFilters(filters) {
         localStorage.setItem(STORAGE_MAP_FILTERS, JSON.stringify(filters));
+    }
+
+    function simplifyNativeMapControls(mapWindow) {
+        if (!mapWindow) return;
+        const typeNames = new Set([
+            'aço', 'água', 'dragão', 'elétrico', 'fada', 'fantasma', 'fogo', 'gelo',
+            'inseto', 'lutador', 'normal', 'pedra', 'planta', 'psíquico', 'sombrio',
+            'terra', 'veneno', 'voador',
+            'steel', 'water', 'dragon', 'electric', 'fairy', 'ghost', 'fire', 'ice',
+            'bug', 'fighting', 'rock', 'grass', 'psychic', 'dark', 'ground', 'poison', 'flying'
+        ]);
+        const normalize = value => String(value || '').normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+        const normalizedTypes = new Set([...typeNames].map(normalize));
+        const candidates = Array.from(mapWindow.querySelectorAll('div, section, nav'))
+            .map(element => ({
+                element,
+                matches: Array.from(element.children).filter(child =>
+                    normalizedTypes.has(normalize(child.textContent.replace(/[^\p{L}]/gu, '')))
+                ).length
+            }))
+            .filter(candidate => candidate.matches >= 8)
+            .sort((a, b) => a.element.getBoundingClientRect().height - b.element.getBoundingClientRect().height);
+        candidates[0]?.element.classList.add('script-hidden-native-types');
     }
 
     function readTrainerLevelFromDOM() {
@@ -673,14 +701,19 @@
         .map-window {
             display: flex !important;
             flex-direction: column !important;
-            width: 780px !important;
+            width: 820px !important;
             max-width: 95vw !important;
-            height: 620px !important;
-            background: #181a20 !important;
+            height: min(680px, 92vh) !important;
+            background: #0b141c !important;
             color: #fff !important;
-            border-radius: 8px;
-            overflow: hidden;
+            border: 1px solid #6f5526 !important;
+            border-radius: 14px !important;
+            overflow: hidden !important;
+            box-shadow: 0 18px 55px rgba(0,0,0,.72) !important;
         }
+        .map-window > *:first-child,
+        .map-window .map-head,
+        .map-window .map-header { border-radius: 13px 13px 0 0 !important; }
         .map-window .map-body {
             flex: 1 !important;
             width: 100% !important;
@@ -688,6 +721,66 @@
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
+            background: #0b141c !important;
+            padding: 0 12px 12px !important;
+            overflow: hidden !important;
+        }
+        .map-window .script-hidden-native-types {
+            display: none !important;
+        }
+        .map-window .map-area {
+            border-radius: 9px !important;
+            overflow: hidden !important;
+        }
+        .map-window .map-filter-q,
+        .map-window input[type="number"],
+        .map-window select {
+            border-radius: 8px !important;
+            border-color: #263d4e !important;
+            background: #0d1a24 !important;
+        }
+        #custom-hunts-filter-bar {
+            background: #101d27 !important;
+            border: 1px solid #203544 !important;
+            border-radius: 11px !important;
+            padding: 9px !important;
+            margin: 8px 0 !important;
+        }
+        #custom-hunts-filter-bar select {
+            min-height: 34px;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+        }
+        #simple-hunts-container {
+            flex: 1 !important;
+            max-height: none !important;
+            min-height: 0 !important;
+            padding: 4px 5px 4px 2px !important;
+            margin-top: 0 !important;
+            background: transparent !important;
+            border: 0 !important;
+            border-radius: 12px !important;
+            scrollbar-color: #315269 transparent;
+        }
+        #simple-hunts-container > div {
+            border-radius: 10px !important;
+            margin-bottom: 7px !important;
+            box-shadow: inset 0 0 0 1px rgba(85,125,151,.12);
+            transition: background .15s ease, transform .15s ease, opacity .15s ease;
+        }
+        #simple-hunts-container > div:hover {
+            background-color: #172a37 !important;
+            transform: translateX(2px);
+        }
+        #simple-hunts-container > div > div:first-child {
+            border-radius: 50% !important;
+        }
+        #simple-hunts-container [style*="text-transform: uppercase"] {
+            background: transparent !important;
+            border: 1px solid #304657;
+            color: #8fa6b8 !important;
+            padding: 1px 4px !important;
+            opacity: .85;
         }
 
         .mod-disabled {
@@ -730,7 +823,12 @@
         .dex-cell.dex-hidden { display: none !important; }
 
         /* Hunt Analyzer Compact Mode */
-        .ha-window.ha-compact { max-width: 290px !important; width: 290px !important; }
+        .ha-window.ha-compact {
+            width: 320px; min-width: 300px; max-width: 90vw;
+            min-height: 360px; max-height: 90vh;
+            box-sizing: border-box !important; resize: both !important;
+            overflow: auto !important; border-radius: 12px !important;
+        }
         .ha-window.ha-compact .ha-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 4px !important; }
         .ha-window.ha-compact .ha-card { padding: 4px 8px !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 8px !important; }
         .ha-window.ha-compact .ha-card small { display: none !important; }
@@ -744,10 +842,14 @@
         .ha-window.ha-compact .ha-drops-head, .ha-window.ha-compact .ha-note { display: none !important; }
         .ha-window.ha-compact .ha-clog-btn { display: none !important; }
         .ha-window.ha-compact .ha-drops { display: none !important; }
-        .ha-window.ha-compact .ha-drops.show-drops { display: flex !important; max-height: 80px !important; overflow-y: auto !important; padding: 4px !important; }
+        .ha-window.ha-compact .ha-drops.show-drops {
+            display: flex !important; max-height: none !important; min-height: 80px !important;
+            overflow-y: auto !important; padding: 6px !important; flex: 1 1 auto !important;
+            border-radius: 8px !important;
+        }
         
         /* Hunt Analyzer Custom UI */
-        .ha-script-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; padding: 0 8px 8px 8px; }
+        .ha-script-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 0; padding: 8px; border-bottom: 1px solid #1b3040; }
         .ha-sbtn { background: #1a2d3a; color: #a0aec0; border: 1px solid #273f52; border-radius: 6px; padding: 6px 4px; font-size: 11px; cursor: pointer; transition: all 0.15s ease; text-align: center; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 4px; }
         .ha-sbtn:hover { background: #3182ce; color: #fff; border-color: #3182ce; }
         .ha-catch-stats { display: block; width: 100%; text-align: center; margin-top: 4px; }
@@ -755,17 +857,57 @@
         .ha-rates { flex-wrap: wrap !important; }
 
         /* Compare Modal */
-        .ha-compare-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10000; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-        .ha-compare-modal { pointer-events: auto; width: 340px; box-shadow: 0 12px 32px rgba(0,0,0,0.8); }
-        .ha-compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .ha-compare-table th { text-align: center; padding: 8px; color: #a0aec0; border-bottom: 1px solid #273f52; font-weight: normal; }
-        .ha-compare-table td { padding: 8px; border-bottom: 1px solid #1a2d3a; text-align: center; font-weight: bold; }
-        .ha-compare-table tr:nth-child(even) { background-color: rgba(255, 255, 255, 0.03); }
+        .ha-compare-backdrop { position: fixed; inset: 0; z-index: 10100; pointer-events: none; }
+        .ha-compare-modal {
+            pointer-events: auto; position: fixed !important; left: 50%; top: 50%;
+            transform: translate(-50%, -50%); width: min(580px, 92vw);
+            min-width: 380px; min-height: 360px; max-width: 94vw; max-height: 90vh;
+            overflow: auto; resize: both; border-radius: 14px !important;
+            border: 1px solid #315269 !important; background: #0b151e !important;
+            box-shadow: 0 20px 55px rgba(0,0,0,.82) !important;
+        }
+        .ha-compare-modal .ha-title { position: sticky; top: 0; z-index: 2; background: #12222e; padding: 11px 13px; }
+        .ha-compare-table { width: 100%; border-collapse: separate; border-spacing: 0 5px; font-size: 13px; }
+        .ha-compare-table th { text-align: center; padding: 8px; color: #91a7b8; font-weight: 600; }
+        .ha-compare-table td { padding: 9px; background:#101f2a; text-align: center; font-weight: bold; }
+        .ha-compare-table td:first-child { border-radius: 7px 0 0 7px; }
+        .ha-compare-table td:last-child { border-radius: 0 7px 7px 0; }
+        .ha-compare-table tr:nth-child(even) { background-color: transparent; }
         .ha-compare-table td:first-child { text-align: left; font-weight: normal; color: #a0aec0; }
         .ha-compare-winner { color: #48bb78 !important; }
         .ha-compare-loser { color: #f56565 !important; }
         .ha-compare-modal .ha-title { cursor: grab; user-select: none; }
         .ha-compare-modal .ha-title:active { cursor: grabbing; }
+
+        /* Inventário não bloqueante e redimensionável */
+        .script-inventory-backdrop {
+            background: transparent !important; backdrop-filter: none !important;
+            pointer-events: none !important;
+        }
+        .script-inventory-backdrop .inv-window, .inv-window.script-resizable-inventory {
+            pointer-events: auto !important; resize: both !important; overflow: auto !important;
+            min-width: 330px !important; min-height: 300px !important;
+            max-width: 94vw !important; max-height: 90vh !important;
+            border-radius: 12px !important;
+        }
+        .inv-window.script-resizable-inventory .inv-grid,
+        .inv-window.script-resizable-inventory .inv-items,
+        .inv-window.script-resizable-inventory .inv-slots {
+            width: 100% !important; box-sizing: border-box !important;
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)) !important;
+            align-content: start !important; gap: 6px !important;
+        }
+        .inv-window.script-resizable-inventory .inv-slot {
+            width: 100% !important; min-width: 42px !important; max-width: 58px !important;
+            aspect-ratio: 1 / 1; justify-self: center !important;
+        }
+        .script-capture-log-window { border-radius: 14px !important; overflow: hidden !important; }
+        .script-capture-log-window .script-quality-badge {
+            display: inline-flex; align-items: center; margin-left: 6px; padding: 2px 6px;
+            border-radius: 999px; background: #173149; border: 1px solid #2d5875;
+            color: #82cfff; font-size: 11px; font-weight: 800;
+        }
     `;
     function appendStyleWhenReady(styleElement) {
         if (document.head) document.head.appendChild(styleElement);
@@ -866,10 +1008,64 @@
 
     function toggleFavorite(huntName) {
         let favs = getFavorites();
-        if (favs.includes(huntName)) favs = favs.filter(name => name !== huntName);
+        if (favs.includes(huntName)) {
+            favs = favs.filter(name => name !== huntName);
+            if (localStorage.getItem(STORAGE_PRIMARY_FAVORITE) === huntName) {
+                localStorage.removeItem(STORAGE_PRIMARY_FAVORITE);
+            }
+        }
         else favs.push(huntName);
         localStorage.setItem(STORAGE_FAVS, JSON.stringify(favs));
+        lastMapRenderSignature = '';
+        updateNavButtonAppearance();
         buildSimpleList();
+    }
+
+    function getPrimaryFavorite() {
+        const favorite = localStorage.getItem(STORAGE_PRIMARY_FAVORITE);
+        return getFavorites().includes(favorite) ? favorite : null;
+    }
+
+    function showPrimaryFavoriteSelector({ teleportAfterSelection = true } = {}) {
+        const favorites = getFavorites();
+        if (!favorites.length) return showScriptNotice('Você não possui nenhuma hunt favorita.');
+        document.querySelector('.primary-favorite-backdrop')?.remove();
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'sell-confirm-backdrop primary-favorite-backdrop';
+        const modal = document.createElement('div');
+        modal.className = 'sell-confirm-modal';
+        modal.style.width = 'min(420px,92vw)';
+        modal.innerHTML = `
+            <div class="sell-confirm-title">
+                <span>⭐ Escolher hunt principal</span>
+                <button class="primary-favorite-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
+            </div>
+            <div class="sell-confirm-body">
+                <p>Esta será usada sempre que você clicar no teleporte de favorita. Clique com o botão direito na estrela da barra para trocar depois.</p>
+                <div class="primary-favorite-list" style="display:grid;gap:7px;"></div>
+            </div>
+        `;
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+        const close = () => backdrop.remove();
+        modal.querySelector('.primary-favorite-close').addEventListener('click', close);
+        const selected = getPrimaryFavorite();
+        const list = modal.querySelector('.primary-favorite-list');
+        favorites.forEach(name => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'sell-confirm-btn';
+            button.style.cssText = 'display:flex;justify-content:space-between;background:#14222d;color:#e2e8f0;border:1px solid #273f52;';
+            button.innerHTML = `<span>${escapeHTML(name)}</span><span>${name === selected ? 'Principal ✓' : 'Selecionar'}</span>`;
+            button.addEventListener('click', () => {
+                localStorage.setItem(STORAGE_PRIMARY_FAVORITE, name);
+                close();
+                updateNavButtonAppearance();
+                if (teleportAfterSelection) teleportToTarget(name);
+            });
+            list.appendChild(button);
+        });
     }
 
     function saveLastHunt(huntName) {
@@ -1006,7 +1202,13 @@
     function teleportToFavorite() {
         const favs = getFavorites();
         if (favs.length === 0) return showScriptNotice('Você não possui nenhuma hunt favorita.');
-        teleportToTarget(favs[0]);
+        if (favs.length === 1) {
+            localStorage.setItem(STORAGE_PRIMARY_FAVORITE, favs[0]);
+            return teleportToTarget(favs[0]);
+        }
+        const primary = getPrimaryFavorite();
+        if (!primary) return showPrimaryFavoriteSelector();
+        teleportToTarget(primary);
     }
 
     function teleportToLastHunt() {
@@ -1025,7 +1227,10 @@
         if (!tpBtn) return;
         const mode = getNavTpMode();
         tpBtn.innerHTML = mode === 'fav' ? '★' : '↺';
-        tpBtn.title = mode === 'fav' ? 'Teleportar para Hunt Favorita' : 'Teleportar para Última Hunt';
+        const primary = getPrimaryFavorite();
+        tpBtn.title = mode === 'fav'
+            ? `Teleportar para ${primary || 'Hunt Favorita'}${getFavorites().length > 1 ? ' · botão direito para escolher' : ''}`
+            : 'Teleportar para Última Hunt';
     }
 
     function injectQuickTPButton() {
@@ -1039,6 +1244,11 @@
                 tpBtn.className = 'dock-btn';
                 tpBtn.type = 'button';
                 tpBtn.addEventListener('click', handleNavQuickTP);
+                tpBtn.addEventListener('contextmenu', event => {
+                    if (getNavTpMode() !== 'fav') return;
+                    event.preventDefault();
+                    showPrimaryFavoriteSelector({ teleportAfterSelection: false });
+                });
                 if (mapBtn && mapBtn.nextSibling) gameDock.insertBefore(tpBtn, mapBtn.nextSibling);
                 else gameDock.appendChild(tpBtn);
                 updateNavButtonAppearance();
@@ -1457,6 +1667,7 @@
             const mapBody = document.querySelector('.map-body');
 
             if (!mapWindow || !mapBody) { isRendering = false; return; }
+            simplifyNativeMapControls(mapWindow);
 
             let customFilterBar = document.getElementById('custom-hunts-filter-bar');
             if (!customFilterBar) {
@@ -3460,35 +3671,39 @@
             backdrop.querySelector('.ha-history-list').innerHTML = '<span style="color:#718096;font-size:12px;">Nenhuma sessão concluída ainda.</span>';
         });
 
-        // Make modal draggable
-        let isDragging = false, startX, startY, initialX = 0, initialY = 0;
+        // Arraste por ponteiro: funciona com mouse e telas sensíveis ao toque.
+        let isDragging = false, startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
         const modal = backdrop.querySelector('.ha-compare-modal');
         const titleBar = modal.querySelector('.ha-title');
         
-        titleBar.addEventListener('mousedown', e => {
-            if (e.target.closest('.ha-compare-close')) return;
+        titleBar.addEventListener('pointerdown', e => {
+            if (e.target.closest('button')) return;
+            const rect = modal.getBoundingClientRect();
             isDragging = true;
             startX = e.clientX;
             startY = e.clientY;
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            modal.style.left = `${rect.left}px`;
+            modal.style.top = `${rect.top}px`;
+            modal.style.transform = 'none';
+            titleBar.setPointerCapture?.(e.pointerId);
+            e.preventDefault();
         });
-        const handleMouseMove = e => {
+        const handlePointerMove = e => {
             if (!isDragging) return;
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            modal.style.transform = `translate(${initialX + dx}px, ${initialY + dy}px)`;
+            const maxLeft = Math.max(0, window.innerWidth - modal.offsetWidth);
+            const maxTop = Math.max(0, window.innerHeight - modal.offsetHeight);
+            modal.style.left = `${Math.min(maxLeft, Math.max(0, initialLeft + e.clientX - startX))}px`;
+            modal.style.top = `${Math.min(maxTop, Math.max(0, initialTop + e.clientY - startY))}px`;
         };
-        const handleMouseUp = e => {
-            if (!isDragging) return;
-            isDragging = false;
-            initialX += e.clientX - startX;
-            initialY += e.clientY - startY;
-        };
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
+        const handlePointerUp = () => { isDragging = false; };
+        document.addEventListener('pointermove', handlePointerMove);
+        document.addEventListener('pointerup', handlePointerUp);
 
         backdrop.querySelector('.ha-compare-close').addEventListener('click', () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('pointermove', handlePointerMove);
+            document.removeEventListener('pointerup', handlePointerUp);
             backdrop.remove();
         });
     }
@@ -3647,15 +3862,91 @@
             actionArea.appendChild(compareBtn);
         }
 
-        if (isNewActionArea) {
-            // Insert right after the main title so it's always visible
-            const haTitle = haWindow.querySelector('h3, .ha-head, .ha-header');
-            if (haTitle) {
-                haTitle.after(actionArea);
-            } else {
-                haWindow.prepend(actionArea);
+        // O título nativo fica sempre no topo e as ações imediatamente abaixo.
+        const haTitle = haWindow.querySelector(':scope > .ha-title, :scope > h3, :scope > .ha-head, :scope > .ha-header')
+            || haWindow.querySelector('.ha-title, h3, .ha-head, .ha-header');
+        if (haTitle) {
+            if (haTitle.nextElementSibling !== actionArea) haTitle.after(actionArea);
+        } else if (isNewActionArea) {
+            haWindow.prepend(actionArea);
+        }
+    }
+
+    function enhanceInventoryWindow() {
+        const inventoryWindow = document.querySelector('.inv-window');
+        if (!inventoryWindow) return;
+        inventoryWindow.classList.add('script-resizable-inventory');
+
+        const namedBackdrop = inventoryWindow.closest(
+            '.win-backdrop, .modal-backdrop, .window-backdrop, .overlay, [class*="backdrop"]'
+        );
+        if (namedBackdrop && namedBackdrop !== inventoryWindow) {
+            namedBackdrop.classList.add('script-inventory-backdrop');
+            return;
+        }
+
+        let ancestor = inventoryWindow.parentElement;
+        while (ancestor && ancestor !== document.body) {
+            const style = getComputedStyle(ancestor);
+            const rect = ancestor.getBoundingClientRect();
+            if (style.position === 'fixed' && rect.width >= innerWidth * 0.8 && rect.height >= innerHeight * 0.8) {
+                ancestor.classList.add('script-inventory-backdrop');
+                break;
+            }
+            ancestor = ancestor.parentElement;
+        }
+    }
+
+    function findCaptureLogWindow() {
+        const nativeWindow = document.querySelector('.clog-window');
+        if (nativeWindow) return nativeWindow;
+        const titlePattern = /(?:log\s*de\s*capturas|capture\s*log)/i;
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let titleNode = null;
+        while (walker.nextNode()) {
+            if (titlePattern.test(walker.currentNode.nodeValue || '')) {
+                titleNode = walker.currentNode;
+                break;
             }
         }
+        if (!titleNode) return null;
+
+        let element = titleNode.parentElement;
+        while (element && element !== document.body) {
+            const text = element.textContent || '';
+            if (/\bIV\s*:?\s*\d+\s*\/\s*\d+/i.test(text) && element.querySelector('button')) return element;
+            element = element.parentElement;
+        }
+        return titleNode.parentElement?.closest('.win-window, .prof-window, [role="dialog"]') || null;
+    }
+
+    let captureLogEnhancementPromise = null;
+    async function enhanceCaptureLog() {
+        const captureWindow = findCaptureLogWindow();
+        if (!captureWindow) return;
+        captureWindow.classList.add('script-capture-log-window');
+        const rows = Array.from(captureWindow.querySelectorAll('.clog-row'));
+        if (!rows.length || rows.every(row => row.dataset.scriptQualityLoaded === 'true')) return;
+        if (captureLogEnhancementPromise) return captureLogEnhancementPromise;
+
+        const activeTab = captureWindow.querySelector('.clog-tab.on')?.textContent?.toLowerCase() || '';
+        const filter = /shiny/.test(activeTab) ? 'shiny' : /norma/.test(activeTab) ? 'normal' : 'all';
+        captureLogEnhancementPromise = gameApiRequest(`/api/game/capture-log?filter=${filter}`)
+            .then(payload => {
+                const captures = Array.isArray(payload?.rows) ? payload.rows : [];
+                Array.from(captureWindow.querySelectorAll('.clog-row')).forEach((row, index) => {
+                    const capture = captures[index];
+                    const level = row.querySelector('.clog-lvl');
+                    const quality = Number(capture?.quality);
+                    if (!level || !Number.isFinite(quality)) return;
+                    level.textContent = `Qualidade ${quality}`;
+                    level.classList.add('script-quality-badge');
+                    row.dataset.scriptQualityLoaded = 'true';
+                });
+            })
+            .catch(error => console.error('Falha ao carregar a qualidade do Log de Capturas:', error))
+            .finally(() => { captureLogEnhancementPromise = null; });
+        return captureLogEnhancementPromise;
     }
 
     let domCheckTimeout = null;
@@ -3672,6 +3963,8 @@
             if (document.querySelector('.ball-window')) injectHuntBallEnhancements(document.querySelector('.ball-window'));
             if (document.querySelector('.dex-window')) injectDexEnhancements();
             if (document.querySelector('.ha-window:not(.ha-compare-modal)')) trackHuntAnalyzer();
+            if (document.querySelector('.inv-window')) enhanceInventoryWindow();
+            enhanceCaptureLog();
 
             const mapWindow = document.querySelector('.map-window');
             if (mapWindow) {

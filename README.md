@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.10.0-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.3-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -88,6 +88,10 @@ Na aba **Pokémon**:
 
 As quantidades e o total de espaços ocupados são mostrados no próprio painel.
 
+### Inventário
+
+O inventário não escurece o restante da tela e não fecha ao clicar fora dele. Use o botão `X` para fechar. A janela também pode ser redimensionada arrastando seu canto.
+
 ## Mapa e hunts
 
 ### Mapa simplificado
@@ -128,6 +132,8 @@ O último filtro e a última ordenação utilizados ficam salvos no navegador.
 Clique na estrela ao lado de uma hunt para marcá-la. A escolha fica salva no navegador e será lembrada quando você abrir o jogo novamente.
 
 Ao clicar na própria hunt, o script faz o teletransporte e fecha informações antigas da tela, como tooltips de drops.
+
+Se houver mais de uma favorita, o primeiro uso do teleporte pede que você escolha uma hunt principal. Depois disso, o botão sempre usa essa hunt. Clique com o botão direito no botão de estrela da barra para trocar a principal.
 
 ### Visualização de drops
 
@@ -261,6 +267,8 @@ O script acrescenta ferramentas ao Hunt Analyzer:
 
 O modo compacto e a exibição de drops são lembrados pelo navegador.
 
+O painel reduzido pode ser redimensionado pelo canto. Quando os drops estão visíveis, a lista aproveita a altura disponível conforme a janela é expandida.
+
 ### Comparador de hunts
 
 Ao trocar de hunt, o script guarda os dados da sessão anterior. A comparação pode incluir:
@@ -284,6 +292,8 @@ O Hunt Analyzer também pode mostrar:
 - horário da última captura;
 - tempo desde a captura;
 - quantidade de Poké Bolas usadas.
+
+O Log de Capturas substitui o nível fixo 1 pela qualidade numérica original registrada pelo jogo em cada Pokémon.
 
 ## Pokédex
 
@@ -342,7 +352,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.10.0**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.3**.
 
 ## Solução de problemas
 
