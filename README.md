@@ -1,334 +1,383 @@
 # 🎮 Pokémon Map & Hunt Enhancer Pro
 
-> Script de Qualidade de Vida para o jogo [Pokémon Idle World](https://poke.idleworld.online/play), feito pela comunidade.
+Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Version](https://img.shields.io/badge/Versão-9.4.10-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
-[![License](https://img.shields.io/badge/Licença-MIT-green?style=for-the-badge)](LICENSE)
-[![Game](https://img.shields.io/badge/Jogo-poke.idleworld.online-orange?style=for-the-badge)](https://poke.idleworld.online/play)
+[![Versão](https://img.shields.io/badge/versão-9.9.63-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
+
+## O que este script faz?
+
+O script melhora a tela do jogo e reúne funções que normalmente exigiriam várias janelas ou deslocamentos. Com ele, você pode:
+
+- encontrar e favoritar hunts com facilidade;
+- teleportar para uma hunt favorita ou para a última hunt visitada;
+- abrir lojas, Mercado Global e Depot mesmo estando dentro de uma hunt;
+- comprar grandes quantidades de itens e Poké Bolas;
+- vender itens e Pokémon com proteções contra vendas acidentais;
+- consultar anúncios do Mercado Global;
+- melhorar a Pokédex e o Hunt Analyzer;
+- escolher quais modificações deseja usar.
+
+Você não precisa saber programar. Depois de instalado, o script funciona dentro do próprio jogo.
+
+> **Importante:** o script não joga sozinho. Compras, vendas, teletransportes e movimentações do Depot só acontecem quando você clica nos respectivos botões.
+
+## Instalação passo a passo
+
+### 1. Instale uma extensão de userscripts
+
+Escolha apenas uma:
+
+| Navegador | Extensão recomendada |
+|---|---|
+| Chrome, Brave ou Arc | [Tampermonkey para Chrome](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) |
+| Microsoft Edge | [Tampermonkey para Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd) |
+| Firefox ou Zen | [Tampermonkey para Firefox](https://addons.mozilla.org/pt-BR/firefox/addon/tampermonkey/) |
+
+Essa extensão é o programa que permite ao navegador executar o script.
+
+### 2. Instale o script
+
+1. Clique em [Instalar Pokémon Map & Hunt Enhancer Pro](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js).
+2. A extensão abrirá uma tela com o código.
+3. Clique em **Instalar**.
+4. Abra ou atualize a página do jogo.
+
+Se tudo estiver correto, novos botões aparecerão na barra superior do jogo.
+
+## Conhecendo os novos botões
+
+### ⭐ ou ↻ — Teleporte rápido
+
+Esse botão fica na barra principal.
+
+- **⭐ Favorita:** leva você diretamente para a primeira hunt marcada como favorita.
+- **↻ Última hunt:** leva você para a última hunt visitada.
+
+É possível escolher o comportamento em **Configurações → Script Mods → Ação do botão de teleporte**.
+
+Se ainda não existir uma favorita ou última hunt, o script mostrará uma pequena janela de aviso. Ele não usa os alertas grandes do navegador.
+
+### 🏪 — Lojas
+
+Ao clicar, um menu aparece logo abaixo do botão. As três opções ficam disponíveis em Cerulean e nas hunts:
+
+- **Mercado Global**
+- **Loja de Poké Bolas**
+- **Vender itens e Pokémon**
+
+O menu não depende do mapa atual. Se você trocar de cidade ou hunt, as opções continuam disponíveis.
+
+### 📦 — Depot
+
+Abre um Depot portátil, inclusive dentro de uma hunt.
+
+Na aba **Itens**:
+
+- a coluna **Mochila** mostra o que está com seu personagem;
+- a coluna **Depot** mostra o que está armazenado;
+- clique em um item da Mochila para guardá-lo;
+- clique em um item do Depot para retirá-lo.
+
+Na aba **Pokémon**:
+
+- a coluna **Equipe** mostra os Pokémon que estão com você;
+- a coluna **Box** mostra os Pokémon guardados;
+- clique em um Pokémon para movê-lo entre a equipe e o Box.
+
+As quantidades e o total de espaços ocupados são mostrados no próprio painel.
+
+## Mapa e hunts
+
+### Mapa simplificado
+
+Ao abrir o mapa, você pode usar uma lista organizada no lugar do mapa gráfico tradicional. Cada hunt pode mostrar:
+
+- nome e nível;
+- Pokémon encontrado;
+- tipo do Pokémon;
+- experiência recebida;
+- valor de venda;
+- efetividade do seu Pokémon ativo;
+- drops;
+- indicação de que você já está naquela hunt;
+- estrela para adicionar aos favoritos.
+
+Você pode ordenar as hunts por:
+
+- maior ou menor preço;
+- melhor efetividade;
+- maior ganho de experiência.
+
+As hunts favoritas permanecem no começo da lista.
+
+### Favoritos
+
+Clique na estrela ao lado de uma hunt para marcá-la. A escolha fica salva no navegador e será lembrada quando você abrir o jogo novamente.
+
+Ao clicar na própria hunt, o script faz o teletransporte e fecha informações antigas da tela, como tooltips de drops.
+
+### Visualização de drops
+
+Você escolhe como consultar os drops:
+
+- **Ícone (?)**: clique ou passe o mouse no ícone da hunt;
+- **Hover**: passe o mouse sobre a hunt;
+- **Oculto**: não exibe a prévia.
+
+O padrão é o modo **Ícone (?)**, que deixa a lista mais limpa.
+
+## Loja de Poké Bolas
+
+A loja portátil usa um painel largo para não ficar espremida dentro das hunts.
+
+Ela mostra:
+
+- seu dinheiro atual;
+- preço de cada Poké Bola;
+- quantidade que você já possui, indicada por **Em estoque**;
+- valor total antes da confirmação da compra.
+
+Os botões permitem comprar:
+
+- `+1`
+- `+10`
+- `+100`
+- `+1.000`
+- `+10.000`
+
+Antes da compra, uma janela comum do próprio script mostra a quantidade, o custo total e o saldo. Não são usados alertas do navegador.
+
+## Venda de itens e Pokémon
+
+Abra **🏪 Lojas → Vender itens e Pokémon**.
+
+### Venda de itens
+
+Cada linha informa:
+
+- nome do item;
+- quantidade disponível;
+- valor unitário;
+- campo para escolher a quantidade que será vendida.
+
+Na parte inferior existem três botões:
+
+- **Marcar tudo:** seleciona todos os itens que podem ser vendidos;
+- **Vender:** vende apenas o que estiver selecionado;
+- **Cancelar:** fecha a janela sem vender.
+
+O painel também informa o saldo atual e o valor total da venda selecionada.
+
+### Cadeados e itens protegidos
+
+Itens protegidos não entram em uma seleção em massa. Isso reduz o risco de vender algo importante por engano.
+
+Também é possível cadastrar itens que sempre devem pedir confirmação antes da venda. A lista padrão inclui itens especiais como:
+
+- Strange Pheromone;
+- Rare Pokémon Picture;
+- Bronze Boss Token;
+- Boss Bronze Token.
+
+Você pode alterar essa lista em **Configurações → Script Mods → Itens com confirmação de venda**.
+
+### Venda de Pokémon
+
+Clique em **Pokémon** na janela de venda para trocar de tela. A lista mostra informações úteis do Pokémon, incluindo:
+
+- IV total;
+- qualidade;
+- preço de venda;
+- dados usados pelas proteções de raridade.
+
+Pokémon Lendários, Míticos e Divinos podem ser automaticamente excluídos da seleção em massa. Essa proteção pode ser ligada ou desligada nas configurações.
+
+## Loja do Mark em Cerulean
+
+As melhorias também são aplicadas à loja normal do Mark:
+
+- quantidade **Em estoque** nos itens;
+- compras de `1`, `10`, `100`, `1.000` e `10.000`;
+- exibição do custo antes da compra;
+- cadeados para impedir vendas acidentais;
+- confirmação para os itens escolhidos nas configurações;
+- seleção e venda de itens ou Pokémon.
+
+As quantidades são atualizadas sem reconstruir a janela continuamente, evitando piscadas na tela e valores temporários incorretos.
+
+## Mercado Global portátil
+
+Abra **🏪 Lojas → Mercado Global**. Os anúncios são carregados quando a janela é aberta ou quando você usa o botão **Atualizar**. O script não fica inserindo anúncios em tempo real enquanto a janela está fechada.
+
+### Abas
+
+- **Itens:** mostra anúncios de itens.
+- **Pokémon:** mostra os Pokémon anunciados e seus IVs.
+
+### Informações exibidas
+
+- nome do item ou Pokémon;
+- quantidade;
+- preço;
+- moeda utilizada;
+- IVs, quando for um Pokémon;
+- botão para comprar um anúncio com preço.
+
+O nome do vendedor é omitido para deixar a lista mais simples.
+
+### Filtros
+
+O painel possui filtros inspirados no mercado normal do jogo. Dependendo da aba, você pode filtrar ou organizar por nome, categoria, tipo, qualidade, IV e preço.
+
+A opção **Oferta** identifica anúncios sem preço definido.
+
+O checkbox para mostrar ofertas funciona assim:
+
+- **marcado:** mostra anúncios normais e ofertas;
+- **desmarcado:** mostra somente itens ou Pokémon que possuem preço.
+
+Filtros atuam sobre os anúncios carregados. Use **Atualizar** quando quiser buscar novamente os dados do mercado.
+
+## Hunt Analyzer
+
+O script acrescenta ferramentas ao Hunt Analyzer:
+
+- **Reduzir/Expandir:** alterna entre o painel normal e uma versão compacta;
+- **Drops:** mostra ou esconde a lista de drops;
+- **Comparar:** compara a hunt atual com a anterior.
+
+O modo compacto e a exibição de drops são lembrados pelo navegador.
+
+### Comparador de hunts
+
+Ao trocar de hunt, o script guarda os dados da sessão anterior. A comparação pode incluir:
+
+- saldo total;
+- saldo por hora;
+- experiência total;
+- experiência por hora;
+- derrotas por hora;
+- duração da hunt;
+- total de Pokémon derrotados.
+
+Resultados melhores aparecem destacados em verde e resultados inferiores em vermelho.
+
+### Última captura
+
+O Hunt Analyzer também pode mostrar:
+
+- horário da última captura;
+- tempo desde a captura;
+- quantidade de Poké Bolas usadas.
+
+## Pokédex
+
+A Pokédex recebe filtros adicionais:
+
+- **Todos:** mostra todos os Pokémon;
+- **Capturados:** mostra somente os já capturados;
+- **Não capturados:** mostra somente os que ainda faltam.
+
+No filtro de não capturados, é possível ordenar pelo menor valor.
+
+### Fast Travel
+
+Quando o **Fast Travel da Pokédex** está ligado, clicar em um Pokémon procura sua hunt e teletransporta o personagem diretamente para ela.
+
+## Configurações do script
+
+Abra a engrenagem do jogo e selecione a aba **Script Mods**. As opções estão separadas em grupos para facilitar o uso.
+
+| Opção | O que faz |
+|---|---|
+| Mapa simplificado | Alterna entre a lista do script e o mapa normal |
+| Visualização de drops | Escolhe Ícone, Hover ou Oculto |
+| Ação do teleporte | Escolhe Favorita ou Última hunt |
+| Exibir chat | Mostra ou esconde o chat |
+| Fast Travel da Pokédex | Permite teleportar clicando na Pokédex |
+| Mercado Global nas hunts | Liga ou desliga o mercado portátil |
+| Compras em grande quantidade | Liga ou desliga os botões adicionais |
+| Venda nas hunts | Liga ou desliga a loja portátil de venda |
+| Melhorias da loja do Mark | Liga ou desliga as melhorias em Cerulean |
+| Confirmação de venda | Escolhe quais itens exigem confirmação |
+| Proteção por cadeado | Evita selecionar itens bloqueados |
+| Proteção de raridade | Evita selecionar Pokémon raros em massa |
+
+Por padrão, o chat fica oculto e a visualização de drops usa o ícone `?`. Todas as preferências ficam salvas somente no navegador utilizado.
+
+### Idiomas
+
+Os principais menus do script acompanham o idioma do jogo:
+
+- jogo em português → menus em português;
+- jogo em inglês → menus em inglês.
+
+Algumas mensagens muito específicas ainda podem aparecer em português.
+
+## Como atualizar
+
+Normalmente o Tampermonkey ou Violentmonkey procura atualizações sozinho.
+
+Para atualizar manualmente:
+
+1. abra o painel da extensão;
+2. encontre **Pokémon Map & Hunt Enhancer Pro**;
+3. procure a opção **Verificar atualizações**;
+4. atualize a página do jogo.
+
+Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
+
+Confira a versão no começo do script. A versão documentada neste README é a **9.9.63**.
+
+## Solução de problemas
+
+### Os novos botões não apareceram
+
+1. Confirme que a extensão está habilitada.
+2. Confirme que o script está habilitado dentro da extensão.
+3. Atualize a página com `Ctrl + F5`.
+4. Verifique se está usando `https://poke.idleworld.online/play`.
+
+### A extensão diz que existe uma versão antiga
+
+Abra o painel da extensão, force a verificação de atualizações e recarregue o jogo. Se necessário, abra o link de instalação novamente.
+
+### Uma loja ou o Depot não carregou
+
+Verifique sua conexão e tente fechar e abrir o painel. Essas janelas consultam sua sessão atual do jogo; se a sessão tiver expirado, atualize a página e entre novamente.
+
+### O Mercado Global está vazio
+
+Confira se algum filtro está escondendo os resultados. Limpe os filtros, habilite a exibição de ofertas e clique em **Atualizar**.
+
+### Um item não foi selecionado por “Marcar tudo”
+
+O item provavelmente está protegido por um cadeado ou pela lista de confirmação. Isso é intencional para evitar vendas acidentais.
+
+### O teleporte rápido não funciona
+
+- No modo Favorita, marque pelo menos uma hunt com a estrela.
+- No modo Última hunt, visite uma hunt pela lista primeiro.
+- Se o mapa não carregar corretamente, atualize a página antes de tentar novamente.
+
+## Privacidade e segurança
+
+- As configurações e favoritas são salvas localmente no navegador.
+- O script não envia suas configurações para serviços de terceiros.
+- As funções de loja, mercado, teletransporte e Depot usam a sessão já aberta no próprio jogo.
+- Nunca compartilhe cookies, tokens de acesso ou arquivos do perfil do navegador.
+- Revise quantidades e valores nas janelas de confirmação antes de comprar ou vender.
+
+Este é um projeto criado pela comunidade e não é uma ferramenta oficial dos desenvolvedores do Pokémon Idle World.
+
+## Créditos
+
+Desenvolvido por **Desjunior** ([JulianoCLI](https://github.com/JulianoCLI)) para a comunidade de Pokémon Idle World.
+
+Sugestões e relatos de problemas podem ser enviados pelas [Issues do GitHub](https://github.com/JulianoCLI/PIW-QOL/issues).
 
 ---
 
-## 📋 Índice
-
-- [O que é esse Script?](#-o-que-é-esse-script)
-- [Instalação Rápida](#-instalação-rápida)
-  - [Instalando a Extensão](#-passo-1-instale-a-extensão-de-userscripts)
-  - [Instalando o Script](#-passo-2-instale-o-script)
-- [Funcionalidades](#-funcionalidades)
-  - [🗺️ Mapa Simplificado](#️-1-mapa-simplificado)
-  - [⭐ Sistema de Favoritos](#-2-sistema-de-favoritos)
-  - [⚡ Botão de Teleporte Rápido](#-3-botão-de-teleporte-rápido)
-  - [📊 Hunt Analyzer Aprimorado](#-4-hunt-analyzer-aprimorado)
-  - [⚖️ Comparador de Hunts](#️-5-comparador-de-hunts)
-  - [🔴 Rastreador de Capturas em Tempo Real](#-6-rastreador-de-capturas-em-tempo-real)
-  - [🛒 Melhorias na Loja (Marketplace)](#-7-melhorias-na-loja-marketplace)
-  - [📖 Melhorias na Pokédex](#-8-melhorias-na-pokédex)
-  - [⚙️ Painel de Configurações](#️-9-painel-de-configurações)
-- [Configurações Disponíveis](#️-configurações-disponíveis)
-- [FAQ](#-faq)
-- [Créditos](#-créditos)
-
----
-
-## 🔎 O que é esse Script?
-
-O **Pokémon Map & Hunt Enhancer Pro** é um userscript que adiciona dezenas de melhorias de qualidade de vida ao [Pokémon Idle World](https://poke.idleworld.online/play). Ele foi desenvolvido para ajudar jogadores a otimizar suas sessões de hunt, navegar pelo jogo mais rápido e tomar decisões mais inteligentes sobre onde farmar.
-
-**Tudo funciona de forma não-intrusiva:** o script apenas lê a interface nativa do jogo e injeta informações extras — nenhuma ação é feita no servidor, nenhum dado é enviado a terceiros.
-
----
-
-## 🚀 Instalação Rápida
-
-### 🔧 Passo 1: Instale a extensão de userscripts
-
-Você precisa de uma extensão para rodar scripts no navegador. Recomendamos:
-
-#### Tampermonkey (Mais popular)
-
-| Navegador | Link |
-|-----------|------|
-| 🟢 **Chrome** / Brave / Arc | [Chrome Web Store](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) |
-| 🔵 **Firefox** | [Firefox Add-ons](https://addons.mozilla.org/pt-BR/firefox/addon/tampermonkey/) |
-| 🟠 **Edge** | [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd) |
-| 🔷 **Zen Browser** | Use o link do Firefox acima (Zen é baseado em Firefox) |
-
-#### Violentmonkey (Alternativa open-source)
-
-| Navegador | Link |
-|-----------|------|
-| 🟢 **Chrome** / Brave / Arc | [Chrome Web Store](https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegedbjbeeklconlalihjl) |
-| 🔵 **Firefox** / **Zen** | [Firefox Add-ons](https://addons.mozilla.org/pt-BR/firefox/addon/violentmonkey/) |
-| 🟠 **Edge** | [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/violentmonkey/eeagobfjdenkkddmbclomhiblgggliao) |
-
-> 💡 **Dica:** Qualquer uma das duas funciona perfeitamente. O Tampermonkey tem mais recursos e suporte; o Violentmonkey é 100% open-source.
-
----
-
-### 📥 Passo 2: Instale o Script
-
-Depois de instalar a extensão, clique no botão abaixo para instalar o script com **atualização automática**:
-
-[![Instalar Script](https://img.shields.io/badge/⬇️%20Instalar%20Script-Clique%20Aqui-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
-
-Uma janela do Tampermonkey/Violentmonkey vai abrir pedindo confirmação. Clique em **"Instalar"**.
-
-> 🔄 O script se atualiza automaticamente. Sempre que uma nova versão for publicada no GitHub, sua extensão vai baixar a atualização silenciosamente.
-
----
-
-## ✨ Funcionalidades
-
-### 🗺️ 1. Mapa Simplificado
-
-> **Onde acessar:** Clique no botão de **Mapa** na dock do jogo.
-
-<!-- 🎬 [VIDEO: Mostrar o mapa nativo vs o mapa simplificado, e como usar a lista de hunts] -->
-
-O mapa visual padrão é substituído por uma lista limpa e ordenável com todas as hunts disponíveis.
-
-**O que você vê em cada hunt:**
-- 🖼️ Ícone/sprite do Pokémon
-- Nome e Nível da hunt
-- **Multiplicador de Efetividade** do seu Pokémon ativo (calculado automaticamente com base no tipo)
-- **Badge de tipo** do Pokémon inimigo (ex: `fire`, `water`)
-- **Valor de venda** (preço NPC) do Pokémon
-- **XP concedido** pelo Pokémon
-- Indicador `[Aqui]` se você já está nessa hunt
-- ⭐ Botão de Favorito
-
-**Modos de ordenação disponíveis (dropdown no topo):**
-
-> ℹ️ **Nota:** Independentemente do filtro escolhido, suas hunts **Favoritas** estarão sempre fixadas no topo. As **cidades vazias** são ocultadas automaticamente para limpar a interface.
-
-| Modo | Descrição |
-|------|-----------|
-| Preço: Maior → Menor | Ordena pelo valor de venda |
-| Preço: Menor → Maior | Inverso do anterior |
-| Efetividade: Maior Vantagem | Ordena pelas maiores vantagens de tipo (desempate por Level) |
-| Somente XP | Ordena pelo maior ganho de XP (priorizando as de maior efetividade de tipo) |
-
-**Preview de Drops (configurável):**
-- **Hover:** Passe o mouse sobre a hunt para ver os drops em tooltip
-- **Ícone (?):** Um botão `?` aparece em cada linha para ver os drops
-- **Oculto:** Sem preview de drops
-
----
-
-### ⭐ 2. Sistema de Favoritos
-
-> **Onde usar:** Botão `★` em cada hunt na lista do mapa.
-
-<!-- 🎬 [VIDEO: Clicar no botão de favorito, mostrar hunt aparecendo no topo da lista] -->
-
-- Clique no `☆` ao lado de qualquer hunt para marcá-la como favorita
-- Hunts favoritas aparecem no **topo da lista** com destaque azul
-- A barra lateral fica azul para indicar que é favorita
-- Os favoritos ficam salvos no navegador e persistem entre sessões
-
----
-
-### ⚡ 3. Botão de Teleporte Rápido
-
-> **Onde usar:** Barra inferior de navegação do jogo (dock), ao lado do botão de mapa.
-
-<!-- 🎬 [VIDEO: Mostrar o botão na dock e clicar nele para teletransportar] -->
-
-Um botão extra é adicionado à dock do jogo. Ao clicar:
-- **Modo ★ (Favorita):** Teletransporta diretamente para sua hunt favorita
-- **Modo ↺ (Última):** Teletransporta para a última hunt que você visitou
-
-> 🤖 **Smart Search:** O script procura automaticamente pela hunt varrendo todas as abas (áreas) do mapa de forma invisível. Você não precisa se preocupar em qual aba o mapa estava (Kanto, Outland, etc).
-
-O modo é configurável em **Configurações → Script Mods → Nav Dock Button Action**.
-
----
-
-### 📊 4. Hunt Analyzer Aprimorado
-
-> **Onde usar:** Janela nativa do **Hunt Analyzer** do jogo.
-
-<!-- 🎬 [VIDEO: Abrir o hunt analyzer, mostrar os botões adicionados e o modo compacto] -->
-
-Três botões são adicionados na parte inferior do Hunt Analyzer:
-
-| Botão | Função |
-|-------|--------|
-| `⤡ Reduzir` | Compacta a janela para ocupar menos espaço na tela |
-| `📦 Drops` | Mostra/esconde a lista de drops da sessão |
-| `⚖️ Comparar` | Abre o **Comparador de Hunts** (ver abaixo) |
-
-**Modo Compacto (`⤡ Reduzir`):**
-
-<!-- 🎬 [VIDEO: Demonstrar o modo compacto side-by-side com o modo normal] -->
-
-A janela fica menor e exibe as informações em formato de grade enxuta, ideal para deixar o Hunt Analyzer aberto ao lado do jogo sem ocupar espaço.
-
----
-
-### ⚖️ 5. Comparador de Hunts
-
-> **Onde acessar:** Botão `⚖️ Comparar` na parte inferior do Hunt Analyzer.
-
-<!-- 🎬 [VIDEO: Fazer uma hunt, trocar para outra hunt, abrir o comparador e mostrar os dados lado a lado] -->
-
-O Comparador salva automaticamente um **snapshot** da hunt anterior quando você troca de local. Ao clicar em **Comparar**, uma janela flutuante exibe os dados lado a lado:
-
-| Métrica | Descrição |
-|---------|-----------|
-| 💰 Balance Total | Gold acumulado (Loot + Capturas − Supply) |
-| 📉 Balance/h | Ritmo de ganho de gold por hora |
-| 🌟 XP Gained | Total de XP ganho na sessão |
-| ✨ XP/h | Ritmo de ganho de XP por hora |
-| ⚔️ Kills/h | Ritmo de abates por hora |
-| ⏱️ Tempo | Tempo total na hunt |
-| 💀 Defeated | Total de Pokémons derrotados |
-
-**Destaques:**
-- 🟢 **Verde** = Melhor resultado nessa métrica
-- 🔴 **Vermelho** = Resultado inferior
-- 🖱️ A janela pode ser **arrastada** pela tela (segure o título)
-- Funciona mesmo sem hunt anterior (exibe valores zerados)
-
-> ℹ️ O snapshot é salvo automaticamente quando o contador de Defeated diminui (indicando troca de hunt). O nome do mapa é gravado no momento da captura para evitar que o nome do novo mapa "vaze" para a hunt anterior.
-
----
-
-### 🔴 6. Rastreador de Capturas em Tempo Real
-
-> **Onde aparece:** Dentro da barra de rates do Hunt Analyzer (ao lado de XP/h e Kills/h).
-
-<!-- 🎬 [VIDEO: Capturar um Pokémon e mostrar o contador atualizando em tempo real] -->
-
-Uma linha extra é adicionada na barra de taxas do Hunt Analyzer:
-
-```
-🔴 Último catch: 17:35 (há 2m) • 5 balls
-```
-
-**O que cada parte significa:**
-- `17:35` → Horário exato do último catch
-- `(há 2m)` → Tempo decorrido desde o último catch (atualiza em tempo real)
-- `5 balls` → Quantidade de Pokébolas usadas desde o último catch
-
-Se você ainda não capturou nada na hunt atual, exibe: `🔴 Nenhum catch nesta hunt`
-
----
-
-### 🛒 7. Melhorias na Loja (Marketplace)
-
-> **Onde acessar:** Janela do **Marketplace** do jogo.
-
-<!-- 🎬 [VIDEO: Mostrar o marketplace com lock de itens e confirmação de venda de raro] -->
-
-#### 🔒 Bloqueio de Itens (Sell Lock)
-
-Na aba **Sell**, um ícone 🔓/🔒 aparece ao lado de cada item. Clique para **bloquear** o item:
-- O item travado fica em tom reduzido
-- Sua checkbox é desabilitada, impedindo que você o selecione para venda por acidente
-- A trava persiste enquanto a janela estiver aberta
-
-#### ✅ Confirmação de Venda para Itens de Valor
-
-Se você tentar vender itens que estão na sua **lista de proteção**, uma janela de confirmação aparece antes de prosseguir. Configure quais itens são protegidos em **Configurações → Script Mods → Sell Confirmation Items**.
-
-Por padrão, `Strange Pheromone` e `Rare Pokémon Picture` já vêm protegidos.
-
-#### 🛡️ Proteção contra Venda de Pokémons Raros
-
-Na aba **Pokémon** da loja, o botão "Selecionar Todos" foi aprimorado: ao clicar nele, Pokémons **Lendários**, **Míticos** e **Divinos** são **automaticamente desmarcados**, protegendo-os de uma venda acidental em massa.
-
----
-
-### 📖 8. Melhorias na Pokédex
-
-> **Onde acessar:** Janela da **Pokédex** do jogo.
-
-<!-- 🎬 [VIDEO: Mostrar os filtros da Pokédex, ordenação e o Fast Travel em ação] -->
-
-Três botões de filtro são adicionados na Pokédex:
-
-| Botão | Função |
-|-------|--------|
-| `Todos` | Mostra todos os Pokémons |
-| `✓ Caught` | Mostra apenas os que você já capturou |
-| `✗ Not Caught` | Mostra apenas os que ainda não capturou |
-
-Quando o filtro **"Not Caught"** está ativo, um botão extra `💰 Menor Valor` aparece para ordenar os Pokémons pelo menor valor de venda (útil para focar nos mais acessíveis primeiro).
-
-#### ⚡ Fast Travel pela Pokédex
-
-Ative o toggle **"⚡ Fast Travel"** na Pokédex. Com ele ativo, clicar em qualquer Pokémon na Pokédex automaticamente **teletransporta você para a hunt** daquele Pokémon, sem precisar abrir o mapa.
-
----
-
-### ⚙️ 9. Painel de Configurações
-
-> **Onde acessar:** Ícone de Configurações do jogo → Aba **"Script Mods"**.
-
-<!-- 🎬 [VIDEO: Abrir as configurações e mostrar a aba Script Mods com todas as opções] -->
-
-Uma aba extra "Script Mods" é adicionada ao painel de configurações nativo do jogo:
-
-| Configuração | Opções |
-|-------------|--------|
-| **Simplified Map Mode** | Ligado / Desligado |
-| **Drops Preview Mode** | Hover / Ícone (?) / Oculto |
-| **Nav Dock Button Action** | ★ Favorita / ↺ Última |
-| **Chat Interface** | Exibir / Ocultar |
-| **Sell Confirmation Items** | Lista editável com busca e ícones dos itens |
-| **Desmarcar Itens com Cadeado (Aba Loja)** | Ligado / Desligado |
-| **Proteção de Venda (Pokémons Raros)** | Ligado / Desligado |
-
----
-
-## 🛠️ Configurações Salvas
-
-Todas as preferências são salvas localmente no **localStorage** do navegador — nenhum dado sai da sua máquina.
-
-| Chave | Padrão | Descrição |
-|-------|--------|-----------|
-| `hunts_favoritas_v1` | `[]` | Lista de hunts favoritas |
-| `ultima_hunt_v1` | `null` | Última hunt visitada |
-| `script_mapa_ativo_v1` | `true` | Mapa simplificado ligado/desligado |
-| `script_chat_ativo_v1` | `true` | Chat visível ou oculto |
-| `script_nav_tp_mode_v1` | `fav` | Modo do botão de teleporte (`fav` ou `last`) |
-| `script_drop_mode_v1` | `hover` | Como ver drops na lista (`hover`, `icon`, `off`) |
-| `script_sell_confirm_items_v1` | (lista padrão) | Itens protegidos contra venda |
-| `script_shop_unselect_lock_v1` | `true` | Proteção contra venda (Itens cadeado) |
-| `script_shop_unselect_legendary_v1` | `true` | Proteção contra venda (Lendários) |
-
----
-
-## ❓ FAQ
-
-**O script funciona no celular?**  
-Não. Extensões de userscript não funcionam em navegadores móveis convencionais.
-
-**O script pode me banir do jogo?**  
-O script **não faz nenhuma ação automática**, não envia comandos ao servidor e não modifica dados do jogo. Ele apenas lê e melhora a interface visualmente. Nenhum dado é enviado para fora do seu navegador.
-
-**Não estou vendo os drops na lista do mapa.**  
-O script carrega os dados de drop da API do jogo (`items.json`). Aguarde alguns segundos após abrir o mapa para que os dados carreguem.
-
-**O Comparador de Hunts não está registrando a hunt anterior.**  
-O snapshot é salvo quando o contador de **Defeated** diminui (você trocou de hunt). Certifique-se de ter feito ao menos **1 kill** na hunt anterior antes de trocar.
-
-**Como forçar uma atualização do script?**  
-Vá em **Tampermonkey → Dashboard** → clique no nome do script → aba **"Installed Version"** → clique no botão de atualizar. Ou desinstale e reinstale pelo link acima.
-
----
-
-## 👥 Créditos
-
-Desenvolvido com 💙 por **Desjunior** ([JulianoCLI](https://github.com/JulianoCLI)) para a comunidade de Pokémon Idle World.
-
-Contribuições, sugestões e reports de bugs são muito bem-vindos! Abra uma [Issue](https://github.com/JulianoCLI/PIW-QOL/issues) ou entre em contato pelo Discord da comunidade do jogo.
-
----
-
-<div align="center">
-
-**[⬇️ Instalar Agora](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)** • **[📝 Reportar Bug](https://github.com/JulianoCLI/PIW-QOL/issues)** • **[⭐ Dar uma Estrela](https://github.com/JulianoCLI/PIW-QOL)**
-
-</div>
+**[Instalar o script](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)** · **[Reportar um problema](https://github.com/JulianoCLI/PIW-QOL/issues)** · **[Abrir o jogo](https://poke.idleworld.online/play)**
