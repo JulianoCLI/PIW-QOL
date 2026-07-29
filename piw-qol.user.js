@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.9.3
+// @version      9.9.4
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -151,7 +151,10 @@
             huntSell: 'Venda na Hunt', huntSellDesc: 'Permite vender itens e Pokémon pela loja da hunt.',
             cityMark: 'Melhorias do Mark', cityMarkDesc: 'Quantidades, cadeados e confirmações na loja da cidade.',
             globalMarket: 'Mercado Global', items: 'Itens', pokemon: 'Pokémon', refresh: 'Atualizar',
+            shops: 'Lojas', ballShop: 'Loja de Poké Bolas', sellItems: 'Vender itens e Pokémon',
             search: 'Buscar...', loading: 'Carregando anúncios…', noListings: 'Nenhum anúncio encontrado.',
+            showing: 'Exibindo', of: 'de', loadMore: 'Carregar mais',
+            inStock: 'em estoque',
             loadFailed: 'Não foi possível carregar o mercado.', seller: 'Vendedor', quantity: 'Quantidade',
             price: 'Preço', selectItems: 'Selecionar itens ▾', protectedItems: 'Itens protegidos. Busque ao lado para adicionar.',
             noProtected: 'Nenhum item protegido', noItemFound: 'Nenhum item encontrado'
@@ -175,7 +178,10 @@
             huntSell: 'Hunt Selling', huntSellDesc: 'Sell items and Pokémon from the hunt shop.',
             cityMark: 'Mark Enhancements', cityMarkDesc: 'Quantities, locks and confirmations in the city shop.',
             globalMarket: 'Global Market', items: 'Items', pokemon: 'Pokémon', refresh: 'Refresh',
+            shops: 'Shops', ballShop: 'Poké Ball Shop', sellItems: 'Sell items and Pokémon',
             search: 'Search...', loading: 'Loading listings…', noListings: 'No listings found.',
+            showing: 'Showing', of: 'of', loadMore: 'Load more',
+            inStock: 'in stock',
             loadFailed: 'Could not load the market.', seller: 'Seller', quantity: 'Quantity',
             price: 'Price', selectItems: 'Select items ▾', protectedItems: 'Protected items. Search to add more.',
             noProtected: 'No protected items', noItemFound: 'No item found'
@@ -527,15 +533,55 @@
     style.id = 'simplifier-dynamic-styles';
     style.innerHTML = `
         .promo-overlay { display: none !important; }
-        #dock-btn-quick-tp {
-            background: rgba(49, 130, 206, 0.2);
-            border: 1px solid #3182ce;
-            color: #ffcc00;
-            font-size: 16px; font-weight: bold;
+        #dock-btn-quick-tp, #dock-btn-shops {
+            background: transparent;
+            border: 0;
+            box-shadow: none;
             display: inline-flex; align-items: center; justify-content: center;
-            transition: all 0.2s ease;
         }
-        #dock-btn-quick-tp:hover { background: rgba(49, 130, 206, 0.5); transform: scale(1.08); }
+        #dock-btn-quick-tp { color: #ffcc00; font-size: 16px; font-weight: bold; }
+        #dock-btn-shops { color: #9ae6b4; font-size: 15px; }
+        .script-shop-wrap .poke-menu[hidden] { display: none !important; }
+
+        .win-window, .cfg-window, .mk-window, .ball-window, .ha-window, .inv-window, .dex-window,
+        .dep-window, .prof-window, .breed-window, .poke-window, .sell-confirm-modal,
+        .cap-panel, .chat-box, .npc-dialog, .script-market-window {
+            border-radius: 10px !important;
+        }
+        nav.game-dock, .phud.game-hud-tl, .phud.game-hud.t1 {
+            border-radius: 10px !important;
+            border: 2px solid rgb(120, 90, 40) !important;
+            border-image: none !important;
+            background-clip: padding-box !important;
+        }
+        nav.game-dock::before, .phud.game-hud-tl::before, .phud.game-hud.t1::before {
+            border-radius: 7px !important;
+        }
+        .cfg-window.script-mods-open {
+            width: min(900px, 94vw) !important;
+            max-width: 94vw !important;
+        }
+        .cfg-mods-content .script-mods-grid {
+            padding: 14px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            background: #0c161f;
+            border-radius: 10px;
+        }
+        .cfg-mods-content .script-mods-title,
+        .cfg-mods-content .script-mods-wide { grid-column: 1 / -1; }
+        .cfg-mods-content .cfg-row {
+            min-width: 0;
+            padding: 12px !important;
+            border-radius: 8px !important;
+        }
+        .cfg-mods-content .cfg-label span { display: block; margin-top: 4px; line-height: 1.35; }
+        @media (max-width: 720px) {
+            .cfg-mods-content .script-mods-grid { grid-template-columns: 1fr; }
+            .cfg-mods-content .script-mods-title,
+            .cfg-mods-content .script-mods-wide { grid-column: auto; }
+        }
 
         .hunt-drop-tooltip {
             position: absolute; background: #0c161f; border: 1px solid #233e52;
@@ -665,13 +711,13 @@
     function isScriptMapActive() { return localStorage.getItem(STORAGE_SCRIPT_ACTIVE) !== 'false'; }
     function setScriptMapActive(state) { localStorage.setItem(STORAGE_SCRIPT_ACTIVE, state ? 'true' : 'false'); applyMapScriptState(); }
 
-    function isChatActive() { return localStorage.getItem(STORAGE_CHAT_ACTIVE) !== 'false'; }
+    function isChatActive() { return localStorage.getItem(STORAGE_CHAT_ACTIVE) === 'true'; }
     function setChatActive(state) { localStorage.setItem(STORAGE_CHAT_ACTIVE, state ? 'true' : 'false'); applyChatState(); }
 
     function getNavTpMode() { return localStorage.getItem(STORAGE_NAV_MODE) || 'fav'; }
     function setNavTpMode(mode) { localStorage.setItem(STORAGE_NAV_MODE, mode); updateNavButtonAppearance(); }
 
-    function getDropMode() { return localStorage.getItem(STORAGE_DROP_MODE) || 'hover'; }
+    function getDropMode() { return localStorage.getItem(STORAGE_DROP_MODE) || 'icon'; }
     function setDropMode(mode) { localStorage.setItem(STORAGE_DROP_MODE, mode); buildSimpleList(); }
 
     function getSellConfirmItems() {
@@ -910,19 +956,68 @@
     }
 
     function injectQuickTPButton() {
-        if (document.getElementById('dock-btn-quick-tp')) return;
         const gameDock = document.querySelector('nav.game-dock');
         if (gameDock) {
-            const tpBtn = document.createElement('button');
-            tpBtn.id = 'dock-btn-quick-tp';
-            tpBtn.className = 'dock-btn dock-btn-custom';
-            tpBtn.type = 'button';
-            tpBtn.addEventListener('click', handleNavQuickTP);
-
             const mapBtn = gameDock.querySelector('button[data-guide="dock-map"]');
-            if (mapBtn && mapBtn.nextSibling) gameDock.insertBefore(tpBtn, mapBtn.nextSibling);
-            else gameDock.appendChild(tpBtn);
-            updateNavButtonAppearance();
+            let tpBtn = document.getElementById('dock-btn-quick-tp');
+            if (!tpBtn) {
+                tpBtn = document.createElement('button');
+                tpBtn.id = 'dock-btn-quick-tp';
+                tpBtn.className = 'dock-btn';
+                tpBtn.type = 'button';
+                tpBtn.addEventListener('click', handleNavQuickTP);
+                if (mapBtn && mapBtn.nextSibling) gameDock.insertBefore(tpBtn, mapBtn.nextSibling);
+                else gameDock.appendChild(tpBtn);
+                updateNavButtonAppearance();
+            }
+
+            if (!document.getElementById('dock-btn-shops')) {
+                const shopWrap = document.createElement('span');
+                shopWrap.className = 'dock-poke-wrap script-shop-wrap';
+                const shopsButton = document.createElement('button');
+                shopsButton.id = 'dock-btn-shops';
+                shopsButton.className = 'dock-btn';
+                shopsButton.type = 'button';
+                shopsButton.textContent = '🏪';
+                shopsButton.title = tr('shops');
+
+                const menu = document.createElement('div');
+                menu.className = 'poke-menu script-shop-menu';
+                menu.setAttribute('role', 'menu');
+                menu.hidden = true;
+                const rebuildMenu = () => {
+                    menu.innerHTML = '';
+                    const addItem = (label, handler) => {
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'poke-menu-item';
+                        item.setAttribute('role', 'menuitem');
+                        item.textContent = label;
+                        item.addEventListener('click', event => {
+                            event.stopPropagation();
+                            menu.hidden = true;
+                            handler();
+                        });
+                        menu.appendChild(item);
+                    };
+                    if (isHuntMarketActive()) addItem(`🌐 ${tr('globalMarket')}`, showGlobalMarketWindow);
+                    const captureShopLink = document.querySelector('[data-guide="capture-bar"] .cap-shop-link');
+                    if (captureShopLink) addItem(`🔴 ${tr('ballShop')}`, () => captureShopLink.click());
+                    if (captureShopLink && isHuntSellActive()) addItem(`💰 ${tr('sellItems')}`, showHuntSellWindow);
+                };
+                shopsButton.addEventListener('click', event => {
+                    event.stopPropagation();
+                    const willOpen = menu.hidden;
+                    document.querySelectorAll('.script-shop-menu').forEach(other => { other.hidden = true; });
+                    if (willOpen) rebuildMenu();
+                    menu.hidden = !willOpen;
+                });
+                document.addEventListener('click', event => {
+                    if (!shopWrap.contains(event.target)) menu.hidden = true;
+                });
+                shopWrap.append(shopsButton, menu);
+                tpBtn.after(shopWrap);
+            }
         }
     }
 
@@ -967,8 +1062,8 @@
             const sellConfirmItems = getSellConfirmItems();
 
             modsContent.innerHTML = `
-                <div style="padding: 10px; display: flex; flex-direction: column; gap: 12px; background: #0c161f; border-radius: 8px;">
-                    <div style="font-size: 16px; font-weight: bold; color: #63b3ed; border-bottom: 1px solid #1a2d3a; padding-bottom: 8px; margin-bottom: 4px;">${tr('modSettings')}</div>
+                <div class="script-mods-grid">
+                    <div class="script-mods-title" style="font-size: 17px; font-weight: bold; color: #63b3ed; border-bottom: 1px solid #1a2d3a; padding-bottom: 10px; margin-bottom: 2px;">⚙️ ${tr('modSettings')}</div>
                     
                     <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0;">
                         <div class="cfg-label" style="margin-bottom: 6px;">
@@ -1041,7 +1136,7 @@
                         </label>
                     </div>
 
-                    <div class="cfg-row" style="background:#14222d;padding:10px;border-radius:6px;border:1px solid #1a2d3a;margin:0;">
+                    <div class="cfg-row script-mods-wide" style="background:#14222d;padding:10px;border-radius:6px;border:1px solid #1a2d3a;margin:0;">
                         <div class="cfg-label" style="margin-bottom:8px;">
                             <b style="color:#e2e8f0;font-size:14px;">${tr('huntFeatures')}</b>
                             <span style="color:#a0aec0;font-size:11px;">${tr('huntFeaturesDesc')}</span>
@@ -1058,7 +1153,7 @@
                             </label>`).join('')}
                     </div>
 
-                    <div class="cfg-row" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0; display:flex; gap:12px; align-items:flex-start;">
+                    <div class="cfg-row script-mods-wide" style="background: #14222d; padding: 10px; border-radius: 6px; border: 1px solid #1a2d3a; margin: 0; display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;">
                         <div class="cfg-label" style="flex:1;">
                             <b style="color: #e2e8f0; font-size: 14px;">${tr('sellConfirmation')}</b>
                             <span style="color: #a0aec0; font-size: 11px; display:block; margin-top:4px;">${tr('protectedItems')}</span>
@@ -1112,11 +1207,8 @@
             });
             modsContent.querySelector('.btn-hunt-market').addEventListener('change', e => {
                 setHuntMarketActive(e.target.checked);
-                if (e.target.checked) injectHuntMarketButton();
-                else {
-                    document.querySelector('.hunt-market-open')?.remove();
-                    document.querySelector('.script-market-backdrop')?.remove();
-                }
+                injectHuntShopLauncher();
+                if (!e.target.checked) document.querySelector('.script-market-backdrop')?.remove();
             });
             modsContent.querySelector('.btn-hunt-bulk').addEventListener('change', e => {
                 setHuntBulkBuyActive(e.target.checked);
@@ -1125,6 +1217,7 @@
             });
             modsContent.querySelector('.btn-hunt-sell').addEventListener('change', e => {
                 setHuntSellActive(e.target.checked);
+                injectHuntShopLauncher();
                 const ballWindow = document.querySelector('.ball-window');
                 if (ballWindow) injectHuntBallEnhancements(ballWindow);
             });
@@ -1259,10 +1352,12 @@
                 tabsList.forEach(t => t.classList.remove('on'));
                 tab.classList.add('on');
                 if (tab.classList.contains('cfg-tab-mods')) {
+                    cfgWindow.classList.add('script-mods-open');
                     originalContent.style.display = 'none';
                     modsContent.style.display = 'block';
                     updateModsUI();
                 } else {
+                    cfgWindow.classList.remove('script-mods-open');
                     modsContent.style.display = 'none';
                     originalContent.style.display = 'block';
                 }
@@ -2010,8 +2105,8 @@
                     <button class="cfg-x market-close" type="button" aria-label="Close">×</button>
                 </div>
                 <div style="display:flex;gap:6px;padding:10px 12px 0;">
-                    <button class="mk-bulk-btn market-tab on" data-category="item" type="button">${tr('items')}</button>
-                    <button class="mk-bulk-btn market-tab" data-category="pokemon" type="button">${tr('pokemon')}</button>
+                    <button class="mk-bulk-btn market-tab on" data-category="Items" type="button">${tr('items')}</button>
+                    <button class="mk-bulk-btn market-tab" data-category="Pokemon" type="button">${tr('pokemon')}</button>
                     <input class="market-search" type="search" placeholder="${tr('search')}" style="margin-left:auto;min-width:220px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
                 </div>
                 <div class="market-status" style="padding:7px 12px;color:#a0aec0;font-size:12px;"></div>
@@ -2019,8 +2114,9 @@
             </div>`;
         document.body.appendChild(backdrop);
 
-        let activeCategory = 'item';
+        let activeCategory = 'Items';
         let currentListings = [];
+        let renderLimit = 100;
         const list = backdrop.querySelector('.market-list');
         const status = backdrop.querySelector('.market-status');
         const search = backdrop.querySelector('.market-search');
@@ -2033,9 +2129,12 @@
                 const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '';
                 return !query || String(name).toLocaleLowerCase().includes(query);
             });
+            const visible = filtered.slice(0, renderLimit);
             list.innerHTML = '';
-            status.textContent = filtered.length ? `${filtered.length} ${activeCategory === 'item' ? tr('items') : tr('pokemon')}` : tr('noListings');
-            filtered.forEach(entry => {
+            status.textContent = filtered.length
+                ? `${tr('showing')} ${visible.length.toLocaleString()} ${tr('of')} ${filtered.length.toLocaleString()} ${activeCategory === 'Items' ? tr('items') : tr('pokemon')}`
+                : tr('noListings');
+            visible.forEach(entry => {
                 const ref = entry.item || entry.pokemon || entry.product || {};
                 const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '—';
                 const price = Number(entry.price ?? entry.totalPrice ?? entry.value ?? 0);
@@ -2052,6 +2151,18 @@
                     <b style="color:#f6c453;">💲 ${price.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}</b>`;
                 list.appendChild(row);
             });
+            if (visible.length < filtered.length) {
+                const more = document.createElement('button');
+                more.type = 'button';
+                more.className = 'mk-bulk-btn';
+                more.style.cssText = 'margin:5px auto;padding:8px 18px;';
+                more.textContent = `${tr('loadMore')} (+${Math.min(100, filtered.length - visible.length)})`;
+                more.addEventListener('click', () => {
+                    renderLimit += 100;
+                    render();
+                });
+                list.appendChild(more);
+            }
         };
 
         const load = async () => {
@@ -2060,6 +2171,7 @@
             try {
                 const payload = await gameApiRequest(`/api/game/market?category=${encodeURIComponent(activeCategory)}`);
                 currentListings = getMarketListings(payload);
+                renderLimit = 100;
                 render();
             } catch (error) {
                 console.warn('Falha ao carregar o mercado global:', error);
@@ -2071,29 +2183,22 @@
         backdrop.querySelector('.market-refresh').addEventListener('click', load);
         backdrop.querySelectorAll('.market-tab').forEach(tab => tab.addEventListener('click', () => {
             activeCategory = tab.dataset.category;
+            renderLimit = 100;
             backdrop.querySelectorAll('.market-tab').forEach(button => button.classList.toggle('on', button === tab));
             load();
         }));
-        search.addEventListener('input', render);
+        search.addEventListener('input', () => {
+            renderLimit = 100;
+            render();
+        });
         load();
     }
 
-    function injectHuntMarketButton() {
+    function injectHuntShopLauncher() {
         const captureBar = document.querySelector('[data-guide="capture-bar"]');
-        if (!captureBar || !isHuntMarketActive() || captureBar.querySelector('.hunt-market-open')) return;
-        const anchor = captureBar.querySelector('.cap-shop-link');
-        if (!anchor) return;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = `${anchor.className} hunt-market-open`;
-        button.textContent = `🌐 ${tr('globalMarket')}`;
-        button.title = tr('marketHudDesc');
-        button.addEventListener('click', event => {
-            event.preventDefault();
-            event.stopPropagation();
-            showGlobalMarketWindow();
-        });
-        anchor.after(button);
+        if (!captureBar) return;
+        const captureShopLink = captureBar.querySelector('.cap-shop-link');
+        if (captureShopLink) captureShopLink.style.display = 'none';
     }
 
     let ballCatalogPromise = null;
@@ -2260,14 +2365,18 @@
     async function injectMarkOwnedQuantities(mkWindow) {
         const buyTab = Array.from(mkWindow.querySelectorAll('.mk-tab'))
             .some(tab => tab.classList.contains('on') && /Comprar|Buy/i.test(tab.textContent));
-        if (!buyTab || !mkWindow.querySelector('.mk-row')) return;
+        if (!buyTab || !mkWindow.querySelector('.mk-row') || mkWindow.dataset.scriptOwnedLoading === 'true') return;
+        mkWindow.dataset.scriptOwnedLoading = 'true';
 
+        let shouldRetry = false;
         try {
-            const [inventory, ballsData, shopData] = await Promise.all([
+            let [inventory, ballsData, shopData] = await Promise.all([
                 requestGameEvent('inventory', 'inv-get', latestInventory),
                 loadBallCatalog(),
                 loadMarkCatalog()
             ]);
+            const inventoryAvailable = inventory.length > 0;
+            shouldRetry = !inventoryAvailable;
             const itemCounts = new Map(inventory.map(entry => [String(entry.itemId), Number(entry.quantity) || 0]));
 
             mkWindow.querySelectorAll('.mk-row').forEach(row => {
@@ -2276,6 +2385,10 @@
                 if (!name || !info) return;
                 const ball = shopData.balls?.find(item => item.name === name);
                 const item = shopData.items?.find(entry => entry.name === name);
+                if (!ball && item && !inventoryAvailable) {
+                    info.querySelector('.script-owned-qty')?.remove();
+                    return;
+                }
                 const quantity = ball
                     ? Number(ballsData.counts?.[String(ball.id)] || 0)
                     : Number(itemCounts.get(String(item?.id)) || 0);
@@ -2286,11 +2399,22 @@
                     owned.className = 'mk-meta script-owned-qty';
                     info.appendChild(owned);
                 }
-                const quantityText = `${quantity.toLocaleString('pt-BR')}× em estoque`;
+                const quantityText = `${quantity.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}× ${tr('inStock')}`;
                 if (owned.textContent !== quantityText) owned.textContent = quantityText;
             });
+            if (inventoryAvailable) delete mkWindow.dataset.scriptOwnedRetries;
         } catch (error) {
             console.warn('Falha ao carregar quantidades do Mark:', error);
+            shouldRetry = true;
+        } finally {
+            delete mkWindow.dataset.scriptOwnedLoading;
+            if (shouldRetry && mkWindow.isConnected) {
+                const retries = Number(mkWindow.dataset.scriptOwnedRetries || 0);
+                if (retries < 5) {
+                    mkWindow.dataset.scriptOwnedRetries = String(retries + 1);
+                    setTimeout(() => injectMarkOwnedQuantities(mkWindow), 800);
+                }
+            }
         }
     }
 
@@ -2908,7 +3032,7 @@
             injectQuickTPButton();
             if (document.querySelector('.cfg-window')) injectConfigTab();
             applyChatState();
-            injectHuntMarketButton();
+            injectHuntShopLauncher();
             if (document.querySelector('.mk-window') && isMarkEnhancementsActive()) injectShopEnhancements();
             if (document.querySelector('.ball-window')) injectHuntBallEnhancements(document.querySelector('.ball-window'));
             if (document.querySelector('.dex-window')) injectDexEnhancements();
