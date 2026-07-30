@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.10.3
+// @version      9.10.9
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -159,6 +159,7 @@
             bulkBuy: 'Compras +1.000/+10.000', bulkBuyDesc: 'Adiciona quantidades grandes à loja de Poké Bolas.',
             huntSell: 'Venda na Hunt', huntSellDesc: 'Permite vender itens e Pokémon pela loja da hunt.',
             cityMark: 'Melhorias do Mark', cityMarkDesc: 'Quantidades, cadeados e confirmações na loja da cidade.',
+            bestHunt: 'Verificar melhor hunt',
             globalMarket: 'Mercado Global', items: 'Itens', pokemon: 'Pokémon', refresh: 'Atualizar',
             shops: 'Lojas', ballShop: 'Loja de Poké Bolas', sellItems: 'Vender itens e Pokémon',
             search: 'Buscar...', loading: 'Carregando anúncios…', noListings: 'Nenhum anúncio encontrado.',
@@ -192,6 +193,7 @@
             bulkBuy: '+1,000/+10,000 purchases', bulkBuyDesc: 'Adds large quantities to the Poké Ball shop.',
             huntSell: 'Hunt Selling', huntSellDesc: 'Sell items and Pokémon from the hunt shop.',
             cityMark: 'Mark Enhancements', cityMarkDesc: 'Quantities, locks and confirmations in the city shop.',
+            bestHunt: 'Check best hunt',
             globalMarket: 'Global Market', items: 'Items', pokemon: 'Pokémon', refresh: 'Refresh',
             shops: 'Shops', ballShop: 'Poké Ball Shop', sellItems: 'Sell items and Pokémon',
             search: 'Search...', loading: 'Loading listings…', noListings: 'No listings found.',
@@ -296,6 +298,105 @@
             })
             .finally(() => { trainerLevelPromise = null; });
         return trainerLevelPromise;
+    }
+
+    function hasPiwToolsStats(pokemon) {
+        return Boolean(pokemon?.stats) && ['hp', 'atk', 'def', 'spAtk', 'spDef', 'speed']
+            .every(stat => Number.isFinite(Number(pokemon.stats[stat])));
+    }
+
+    function requestPokemonTeamFromGameContext(timeoutMs = 1800) {
+        const hudElement = document.querySelector('.phud-name') || document.querySelector('.phud');
+        if (!hudElement) return Promise.resolve([]);
+        const fiberKey = Object.keys(hudElement).find(key => key.startsWith('__reactFiber$'));
+        let fiber = fiberKey ? hudElement[fiberKey] : null;
+        let gameContext = null;
+        for (let depth = 0; fiber && depth < 30; depth++, fiber = fiber.return) {
+            const value = fiber.memoizedProps?.value;
+            if (value && typeof value.subscribe === 'function' && typeof value.requestPokes === 'function') {
+                gameContext = value;
+                break;
+            }
+        }
+        if (!gameContext) return Promise.resolve([]);
+
+        return new Promise(resolve => {
+            let settled = false;
+            let unsubscribe = null;
+            const finish = list => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                try { unsubscribe?.(); } catch {}
+                resolve(Array.isArray(list) ? list : []);
+            };
+            const timeout = setTimeout(() => finish([]), timeoutMs);
+            unsubscribe = gameContext.subscribe('pokes', message => finish(message?.list));
+            gameContext.requestPokes();
+        });
+    }
+
+    async function getCompleteLeaderPokemon() {
+        let pokemonList = await requestPokemonTeamFromGameContext();
+        if (!pokemonList.some(hasPiwToolsStats)) {
+            pokemonList = Array.isArray(latestPokemon) ? latestPokemon : [];
+        }
+        let leader = pokemonList.find(pokemon => pokemon.leader)
+            || pokemonList.filter(pokemon => pokemon.team)
+                .sort((a, b) => Number(a.slot ?? 99) - Number(b.slot ?? 99))[0];
+        return hasPiwToolsStats(leader) ? leader : null;
+    }
+
+    function openExternalLink(url) {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    }
+
+    async function openBestHuntForLeader() {
+        try {
+            const [leader, characterPayload] = await Promise.all([
+                getCompleteLeaderPokemon(),
+                gameApiRequest('/api/characters/me')
+            ]);
+            const stats = leader?.stats;
+            if (!leader || !stats) {
+                throw new Error('Não foi possível identificar os atributos do Pokémon principal.');
+            }
+
+            const level = Math.max(1, Number(leader.level) || 1);
+            const params = new URLSearchParams({
+                pokemon: getCleanHuntName(leader.name),
+                level: String(level),
+                hp: String(stats.hp),
+                atk: String(stats.atk),
+                def: String(stats.def),
+                spatk: String(stats.spAtk),
+                spdef: String(stats.spDef),
+                speed: String(stats.speed),
+                tab: 'route',
+                routeTarget: String(300)
+            });
+
+            const character = characterPayload?.character || characterPayload || {};
+            if (character.clan) {
+                params.set('clan', String(character.clan).trim().toLowerCase());
+                if (Number(character.clanRank) > 0) params.set('clanRank', String(character.clanRank));
+            }
+
+            const url = `https://piwtools.com.br/hunt?${params.toString()}`;
+            openExternalLink(url);
+        } catch (error) {
+            showScriptNotice(error.message || 'Não foi possível gerar o link para o PIW Tools.', {
+                title: 'Melhor hunt',
+                isError: true
+            });
+        }
     }
 
     function parseGameNumber(value) {
@@ -751,6 +852,15 @@
             border-radius: 8px !important;
             box-shadow: none !important;
         }
+        #check-best-hunt-btn {
+            min-height: 34px; padding: 6px 11px; border-radius: 8px;
+            border: 1px solid #2d6f7d; background: #10303a; color: #75e6f2;
+            font: 700 12px/1.2 inherit; cursor: pointer; white-space: nowrap;
+            transition: background .15s ease, border-color .15s ease, color .15s ease;
+        }
+        #check-best-hunt-btn:hover {
+            background: #174552; border-color: #48c7d8; color: #e8fdff;
+        }
         #simple-hunts-container {
             flex: 1 !important;
             max-height: none !important;
@@ -829,6 +939,7 @@
             box-sizing: border-box !important; resize: both !important;
             overflow: auto !important; border-radius: 12px !important;
         }
+        .ha-window:not(.ha-compare-modal) { opacity: 1 !important; }
         .ha-window.ha-compact .ha-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 4px !important; }
         .ha-window.ha-compact .ha-card { padding: 4px 8px !important; flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; gap: 8px !important; }
         .ha-window.ha-compact .ha-card small { display: none !important; }
@@ -861,13 +972,13 @@
         .ha-compare-modal {
             pointer-events: auto; position: fixed !important; left: 50%; top: 50%;
             transform: translate(-50%, -50%); width: min(580px, 92vw);
-            min-width: 380px; min-height: 360px; max-width: 94vw; max-height: 90vh;
-            overflow: auto; resize: both; border-radius: 14px !important;
+            min-width: 360px; min-height: 420px; max-width: 94vw; max-height: 90vh;
+            overflow: auto !important; resize: both; border-radius: 14px !important;
             border: 1px solid #315269 !important; background: #0b151e !important;
-            box-shadow: 0 20px 55px rgba(0,0,0,.82) !important;
+            box-shadow: 0 20px 55px rgba(0,0,0,.82) !important; padding-bottom: 12px;
         }
         .ha-compare-modal .ha-title { position: sticky; top: 0; z-index: 2; background: #12222e; padding: 11px 13px; }
-        .ha-compare-table { width: 100%; border-collapse: separate; border-spacing: 0 5px; font-size: 13px; }
+        .ha-compare-table { width: 100%; min-width: 500px; border-collapse: separate; border-spacing: 0 5px; font-size: 13px; }
         .ha-compare-table th { text-align: center; padding: 8px; color: #91a7b8; font-weight: 600; }
         .ha-compare-table td { padding: 9px; background:#101f2a; text-align: center; font-weight: bold; }
         .ha-compare-table td:first-child { border-radius: 7px 0 0 7px; }
@@ -886,27 +997,33 @@
         }
         .script-inventory-backdrop .inv-window, .inv-window.script-resizable-inventory {
             pointer-events: auto !important; resize: both !important; overflow: auto !important;
-            min-width: 330px !important; min-height: 300px !important;
-            max-width: 94vw !important; max-height: 90vh !important;
+            min-width: 260px !important; min-height: 250px !important;
+            max-width: 98vw !important; max-height: 95vh !important;
             border-radius: 12px !important;
         }
         .inv-window.script-resizable-inventory .inv-grid,
         .inv-window.script-resizable-inventory .inv-items,
         .inv-window.script-resizable-inventory .inv-slots {
-            width: 100% !important; box-sizing: border-box !important;
+            width: auto !important; max-width: 100% !important; min-width: 0 !important;
+            box-sizing: border-box !important;
             display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)) !important;
-            align-content: start !important; gap: 6px !important;
+            grid-template-columns: repeat(auto-fill, 42px) !important;
+            grid-auto-rows: 42px !important;
+            justify-content: start !important; align-content: start !important;
+            gap: 6px !important; padding: 8px 12px !important;
+            overflow: auto !important;
         }
         .inv-window.script-resizable-inventory .inv-slot {
-            width: 100% !important; min-width: 42px !important; max-width: 58px !important;
-            aspect-ratio: 1 / 1; justify-self: center !important;
+            width: 42px !important; height: 42px !important;
+            min-width: 42px !important; max-width: 42px !important;
+            min-height: 42px !important; max-height: 42px !important;
+            aspect-ratio: auto !important; justify-self: start !important;
         }
         .script-capture-log-window { border-radius: 14px !important; overflow: hidden !important; }
         .script-capture-log-window .script-quality-badge {
-            display: inline-flex; align-items: center; margin-left: 6px; padding: 2px 6px;
-            border-radius: 999px; background: #173149; border: 1px solid #2d5875;
-            color: #82cfff; font-size: 11px; font-weight: 800;
+            display: inline !important; margin: 0 !important; padding: 0 !important;
+            border: 0 !important; border-radius: 0 !important; background: transparent !important;
+            font-size: inherit !important; font-weight: 800 !important;
         }
     `;
     function appendStyleWhenReady(styleElement) {
@@ -1675,7 +1792,7 @@
                 customFilterBar = document.createElement('div');
                 customFilterBar.id = 'custom-hunts-filter-bar';
                 customFilterBar.style = `
-                    display: grid; grid-template-columns: minmax(180px,1.5fr) minmax(120px,1fr) minmax(150px,1fr);
+                    display: grid; grid-template-columns: minmax(175px,1.4fr) minmax(115px,1fr) minmax(145px,1fr) minmax(155px,auto);
                     gap: 8px; margin-top: 8px; margin-bottom: 4px; font-size: 13px;
                 `;
                 
@@ -1695,14 +1812,17 @@
                         <option value="favorites">Favoritas acessíveis</option>
                         <option value="advantage">Com vantagem de tipo</option>
                     </select>
+                    <button id="check-best-hunt-btn" type="button" title="Abrir o PIW Tools com os dados do Pokémon principal">🧭 ${tr('bestHunt')}</button>
                 `;
                 mapBody.appendChild(customFilterBar);
 
                 const sortSelect = customFilterBar.querySelector('#sort-hunts-select');
                 const typeSelect = customFilterBar.querySelector('#filter-hunts-type');
                 const accessSelect = customFilterBar.querySelector('#filter-hunts-access');
+                const bestHuntButton = customFilterBar.querySelector('#check-best-hunt-btn');
                 sortSelect.value = savedFilters.sort || 'price_desc';
                 accessSelect.value = savedFilters.access || 'all';
+                bestHuntButton.addEventListener('click', openBestHuntForLeader);
                 customFilterBar.addEventListener('change', () => {
                     setMapFilters({ sort: sortSelect.value, type: typeSelect.value, access: accessSelect.value });
                     lastMapRenderSignature = '';
@@ -3594,6 +3714,27 @@
         return new Intl.NumberFormat('pt-BR').format(num);
     }
 
+    let huntAnalyzerRenderRefreshPending = false;
+    function refreshHuntAnalyzerGameRender() {
+        if (huntAnalyzerRenderRefreshPending || document.hidden) return;
+        if (!document.querySelector('.ha-window:not(.ha-compare-modal)')) return;
+        huntAnalyzerRenderRefreshPending = true;
+        setTimeout(() => {
+            try {
+                const event = new Event('visibilitychange');
+                Object.defineProperty(event, 'piwQolRenderRefresh', { value: true });
+                document.dispatchEvent(event);
+            } finally {
+                huntAnalyzerRenderRefreshPending = false;
+            }
+        }, 80);
+    }
+
+    document.addEventListener('visibilitychange', event => {
+        if (!event.piwQolRenderRefresh && !document.hidden) refreshHuntAnalyzerGameRender();
+    });
+    window.addEventListener('focus', refreshHuntAnalyzerGameRender);
+
     function showCompareModal() {
         const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
         const last = lastHuntSnapshot || huntHistory[0] || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
@@ -3711,6 +3852,7 @@
     function trackHuntAnalyzer() {
         const haWindow = document.querySelector('.ha-window:not(.ha-compare-modal)');
         if (!haWindow) return;
+        refreshHuntAnalyzerGameRender();
 
         const getCardVal = (idx) => {
             const card = haWindow.querySelectorAll('.ha-card b')[idx];
@@ -3937,9 +4079,11 @@
                 Array.from(captureWindow.querySelectorAll('.clog-row')).forEach((row, index) => {
                     const capture = captures[index];
                     const level = row.querySelector('.clog-lvl');
+                    const rarity = row.querySelector('.clog-meta b');
                     const quality = Number(capture?.quality);
                     if (!level || !Number.isFinite(quality)) return;
-                    level.textContent = `Qualidade ${quality}`;
+                    level.textContent = String(quality);
+                    if (rarity) level.style.color = getComputedStyle(rarity).color;
                     level.classList.add('script-quality-badge');
                     row.dataset.scriptQualityLoaded = 'true';
                 });

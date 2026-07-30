@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.10.3-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.9-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -90,7 +90,7 @@ As quantidades e o total de espaços ocupados são mostrados no próprio painel.
 
 ### Inventário
 
-O inventário não escurece o restante da tela e não fecha ao clicar fora dele. Use o botão `X` para fechar. A janela também pode ser redimensionada arrastando seu canto.
+O inventário não escurece o restante da tela e não fecha ao clicar fora dele. Use o botão `X` para fechar. A janela também pode ser redimensionada arrastando seu canto. Os slots mantêm um tamanho fixo e apenas reorganizam suas colunas conforme o espaço disponível.
 
 ## Mapa e hunts
 
@@ -126,6 +126,20 @@ O mapa também considera o nível do treinador:
 - a pesquisa também encontra hunts pelo nome de seus drops.
 
 O último filtro e a última ordenação utilizados ficam salvos no navegador.
+
+### Verificar melhor hunt
+
+O botão **Verificar melhor hunt** abre o [PIW Tools](https://piwtools.com.br/) em uma nova aba. O script preenche automaticamente:
+
+- Pokémon principal;
+- nível atual;
+- HP, ataque, defesa, ataque especial, defesa especial e velocidade;
+- clã e rank do clã, quando disponíveis;
+- próximo múltiplo de 10 como objetivo da rota.
+
+Nenhum dado de acesso ou senha é enviado. Somente as informações necessárias são colocadas nos parâmetros do link.
+
+Os dados do Pokémon são lidos do cache que o próprio jogo já mantém para o WebSocket. O script não abre uma segunda conexão, não baixa novamente toda a coleção e não precisa abrir a janela “My Pokes”.
 
 ### Favoritos
 
@@ -269,6 +283,8 @@ O modo compacto e a exibição de drops são lembrados pelo navegador.
 
 O painel reduzido pode ser redimensionado pelo canto. Quando os drops estão visíveis, a lista aproveita a altura disponível conforme a janela é expandida.
 
+O Analyzer também funciona no modo de batalha **Cartas**. Ao retornar para a aba do jogo, o mod resincroniza a visibilidade da renderização para evitar que a tela permaneça no estado escuro de economia de recursos.
+
 ### Comparador de hunts
 
 Ao trocar de hunt, o script guarda os dados da sessão anterior. A comparação pode incluir:
@@ -293,7 +309,7 @@ O Hunt Analyzer também pode mostrar:
 - tempo desde a captura;
 - quantidade de Poké Bolas usadas.
 
-O Log de Capturas substitui o nível fixo 1 pela qualidade numérica original registrada pelo jogo em cada Pokémon.
+O Log de Capturas substitui o nível fixo 1 somente pelo número da qualidade original. O número usa a mesma cor da categoria de qualidade exibida ao lado.
 
 ## Pokédex
 
@@ -352,7 +368,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.10.3**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.9**.
 
 ## Solução de problemas
 
