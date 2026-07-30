@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.10.11-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.12-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -224,7 +224,7 @@ Clique em **Pokémon** na janela de venda para trocar de tela. A lista mostra in
 - preço de venda;
 - dados usados pelas proteções de raridade.
 
-É possível filtrar a lista por nome, Shiny ou normal, IV mínimo e qualidade mínima. A leitura tenta primeiro o cache interno do jogo, tornando a janela mais confiável quando existem várias abas abertas.
+É possível filtrar a lista por nome, Shiny ou normal, intervalo de IV e intervalo de qualidade. O botão **Marcar tudo** seleciona somente os Pokémon visíveis que passaram pelos filtros e não estejam protegidos. Ao mudar os filtros, Pokémon ocultados são desmarcados para evitar uma venda acidental. A leitura tenta primeiro o cache interno do jogo, tornando a janela mais confiável quando existem várias abas abertas.
 
 Pokémon Lendários, Míticos e Divinos podem ser automaticamente excluídos da seleção em massa. Essa proteção pode ser ligada ou desligada nas configurações.
 
@@ -370,7 +370,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.10.11**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.12**.
 
 ## Solução de problemas
 

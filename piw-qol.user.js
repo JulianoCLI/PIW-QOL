@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.10.11
+// @version      9.10.12
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -2701,19 +2701,22 @@
                     <button class="hunt-sell-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
                 </div>
                 <div class="sell-confirm-body">
-                    <div class="hunt-pokemon-filters" style="display:grid;grid-template-columns:minmax(140px,1fr) auto auto auto;gap:6px;margin-bottom:8px;">
-                        <input class="hunt-pokemon-search" type="search" placeholder="Buscar Pokémon..." style="min-width:0;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 8px;">
+                    <div class="hunt-pokemon-filters" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                        <input class="hunt-pokemon-search" type="search" placeholder="Buscar Pokémon..." style="min-width:140px;flex:1;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 8px;">
                         <select class="hunt-pokemon-shiny-filter" style="background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
                             <option value="">Todos</option>
                             <option value="shiny">✨ Shiny</option>
                             <option value="normal">Normais</option>
                         </select>
-                        <input class="hunt-pokemon-iv-filter" type="number" min="0" max="192" placeholder="IV mín." style="width:72px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
-                        <input class="hunt-pokemon-quality-filter" type="number" min="0" step="0.01" placeholder="Qual. mín." style="width:82px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                        <input class="hunt-pokemon-iv-min-filter" type="number" min="0" max="192" placeholder="IV mín." style="width:72px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                        <input class="hunt-pokemon-iv-max-filter" type="number" min="0" max="192" placeholder="IV máx." style="width:72px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                        <input class="hunt-pokemon-quality-min-filter" type="number" min="0" step="0.01" placeholder="Qual. mín." style="width:82px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                        <input class="hunt-pokemon-quality-max-filter" type="number" min="0" step="0.01" placeholder="Qual. máx." style="width:82px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
                     </div>
                     <div class="hunt-sell-status" style="color:#a0aec0;text-align:center;padding:8px;">Carregando Pokémon...</div>
                     <div class="hunt-sell-list"></div>
                     <div class="sell-confirm-footer" style="display:none;">
+                        <button class="sell-confirm-btn hunt-pokemon-select-all" type="button">Marcar tudo</button>
                         <button class="sell-confirm-btn yes hunt-pokemon-submit" type="button">Vender selecionados</button>
                         <button class="sell-confirm-btn no hunt-sell-cancel" type="button">Cancelar</button>
                     </div>
@@ -2736,8 +2739,11 @@
         const submit = backdrop.querySelector('.hunt-pokemon-submit');
         const pokeSearch = backdrop.querySelector('.hunt-pokemon-search');
         const shinyFilter = backdrop.querySelector('.hunt-pokemon-shiny-filter');
-        const ivFilter = backdrop.querySelector('.hunt-pokemon-iv-filter');
-        const qualityFilter = backdrop.querySelector('.hunt-pokemon-quality-filter');
+        const ivMinFilter = backdrop.querySelector('.hunt-pokemon-iv-min-filter');
+        const ivMaxFilter = backdrop.querySelector('.hunt-pokemon-iv-max-filter');
+        const qualityMinFilter = backdrop.querySelector('.hunt-pokemon-quality-min-filter');
+        const qualityMaxFilter = backdrop.querySelector('.hunt-pokemon-quality-max-filter');
+        const selectAll = backdrop.querySelector('.hunt-pokemon-select-all');
 
         try {
             const [pokemon, shopData] = await Promise.all([
@@ -2789,13 +2795,20 @@
             const updateSummary = () => {
                 const total = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'))
                     .reduce((sum, checkbox) => sum + Number(checkbox.dataset.value || 0), 0);
-                status.textContent = `Saldo atual: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Venda selecionada: 💲${total.toLocaleString('pt-BR')}`;
+                const visibleRows = Array.from(list.querySelectorAll('.hunt-sell-row:not([hidden])'));
+                const selectable = visibleRows
+                    .map(row => row.querySelector('input[type="checkbox"]'))
+                    .filter(checkbox => checkbox && !checkbox.disabled);
+                const allVisibleSelected = selectable.length > 0 && selectable.every(checkbox => checkbox.checked);
+                selectAll.textContent = allVisibleSelected ? 'Desmarcar visíveis' : 'Marcar tudo';
+                status.textContent = `${visibleRows.length.toLocaleString('pt-BR')} Pokémon exibido(s) · Saldo: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Selecionado: 💲${total.toLocaleString('pt-BR')}`;
             };
             const applyPokemonFilters = () => {
                 const query = pokeSearch.value.trim().toLocaleLowerCase();
-                const minIv = ivFilter.value === '' ? null : Number(ivFilter.value);
-                const minQuality = qualityFilter.value === '' ? null : Number(qualityFilter.value);
-                let visible = 0;
+                const minIv = ivMinFilter.value === '' ? null : Number(ivMinFilter.value);
+                const maxIv = ivMaxFilter.value === '' ? null : Number(ivMaxFilter.value);
+                const minQuality = qualityMinFilter.value === '' ? null : Number(qualityMinFilter.value);
+                const maxQuality = qualityMaxFilter.value === '' ? null : Number(qualityMaxFilter.value);
                 list.querySelectorAll('.hunt-sell-row').forEach(row => {
                     const shinyMatches = !shinyFilter.value
                         || (shinyFilter.value === 'shiny' && row.dataset.shiny === 'true')
@@ -2803,17 +2816,23 @@
                     const show = (!query || row.dataset.searchName.includes(query))
                         && shinyMatches
                         && (minIv === null || Number(row.dataset.iv) >= minIv)
-                        && (minQuality === null || Number(row.dataset.quality) >= minQuality);
+                        && (maxIv === null || Number(row.dataset.iv) <= maxIv)
+                        && (minQuality === null || Number(row.dataset.quality) >= minQuality)
+                        && (maxQuality === null || Number(row.dataset.quality) <= maxQuality);
                     row.hidden = !show;
-                    if (show) visible++;
+                    if (!show) row.querySelector('input[type="checkbox"]').checked = false;
                 });
-                const selectedTotal = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'))
-                    .reduce((sum, checkbox) => sum + Number(checkbox.dataset.value || 0), 0);
-                status.textContent = `${visible.toLocaleString('pt-BR')} Pokémon exibido(s) · Saldo: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Selecionado: 💲${selectedTotal.toLocaleString('pt-BR')}`;
+                updateSummary();
             };
             list.addEventListener('change', updateSummary);
-            [pokeSearch, shinyFilter, ivFilter, qualityFilter].forEach(control => {
+            [pokeSearch, shinyFilter, ivMinFilter, ivMaxFilter, qualityMinFilter, qualityMaxFilter].forEach(control => {
                 control.addEventListener('input', applyPokemonFilters);
+            });
+            selectAll.addEventListener('click', () => {
+                const selectable = Array.from(list.querySelectorAll('.hunt-sell-row:not([hidden]) input[type="checkbox"]:not(:disabled)'));
+                const shouldSelect = selectable.some(checkbox => !checkbox.checked);
+                selectable.forEach(checkbox => { checkbox.checked = shouldSelect; });
+                updateSummary();
             });
             updateSummary();
             applyPokemonFilters();
