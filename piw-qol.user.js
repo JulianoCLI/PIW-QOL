@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.10.9
+// @version      9.10.10
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -147,7 +147,7 @@
             simplifiedMapDesc: 'Ativa a lista limpa ou restaura o mapa gráfico nativo.',
             dropsPreview: 'Visualização dos drops', dropsPreviewDesc: 'Escolha como ver os itens na lista do mapa.',
             hidden: 'Oculto', icon: 'Ícone (?)', navAction: 'Ação do botão de teleporte',
-            navActionDesc: 'Define a ação do botão de teleporte na barra do jogo.', favorite: 'Favorita', last: 'Última',
+            navActionDesc: 'Define a ação do botão de teleporte na barra do jogo.', favorite: 'Favorita', last: 'Última', none: 'Desativado',
             chatInterface: 'Interface do chat', chatInterfaceDesc: 'Exibe ou oculta a janela de chat.',
             show: 'Exibir', hide: 'Ocultar', dexFastTravelDesc: 'Exibe o Fast Travel na Pokédex.',
             enableDexFastTravel: 'Habilitar ⚡ Fast Travel na Pokédex', selectAllGuards: 'Proteções do Selecionar tudo',
@@ -166,7 +166,7 @@
             showing: 'Exibindo', of: 'de', loadMore: 'Carregar mais',
             inStock: 'em estoque',
             buy: 'Comprar', offerOnly: 'Oferta', ivTotal: 'IV total', showOffers: 'Mostrar ofertas',
-            all: 'Todos', stones: 'Stones', pokeBalls: 'Poké Balls', diamonds: 'Diamonds',
+            all: 'Todos', stones: 'Stones', pokeBalls: 'Poké Balls', diamonds: 'Diamonds', currency: 'Moeda', gold: 'Dólar',
             recent: 'Mais recentes', lowestPrice: 'Menor preço', highestPrice: 'Maior preço',
             highestIv: 'Maior IV', highestPower: 'Maior poder', highestLevel: 'Maior nível', highestQuality: 'Maior qualidade',
             shinyOnly: 'Somente shiny', minIv: 'IV mín.', maxIv: 'IV máx.', minLevel: 'Nível mín.', maxLevel: 'Nível máx.', minQuality: 'Qual. mín.', maxQuality: 'Qual. máx.', allTypes: 'Todos os tipos',
@@ -181,7 +181,7 @@
             simplifiedMapDesc: 'Enables the clean list or restores the native graphical map.',
             dropsPreview: 'Drops Preview', dropsPreviewDesc: 'Choose how items appear in the map list.',
             hidden: 'Hidden', icon: 'Icon (?)', navAction: 'Teleport Button Action',
-            navActionDesc: 'Defines the teleport button action in the game dock.', favorite: 'Favorite', last: 'Last',
+            navActionDesc: 'Defines the teleport button action in the game dock.', favorite: 'Favorite', last: 'Last', none: 'Disabled',
             chatInterface: 'Chat Interface', chatInterfaceDesc: 'Shows or hides the chat window.',
             show: 'Show', hide: 'Hide', dexFastTravelDesc: 'Shows the Fast Travel option in the Pokédex.',
             enableDexFastTravel: 'Enable ⚡ Fast Travel in the Pokédex', selectAllGuards: 'Select All Guards',
@@ -200,7 +200,7 @@
             showing: 'Showing', of: 'of', loadMore: 'Load more',
             inStock: 'in stock',
             buy: 'Buy', offerOnly: 'Offer', ivTotal: 'Total IV', showOffers: 'Show offers',
-            all: 'All', stones: 'Stones', pokeBalls: 'Poké Balls', diamonds: 'Diamonds',
+            all: 'All', stones: 'Stones', pokeBalls: 'Poké Balls', diamonds: 'Diamonds', currency: 'Currency', gold: 'Dollar',
             recent: 'Most recent', lowestPrice: 'Lowest price', highestPrice: 'Highest price',
             highestIv: 'Highest IV', highestPower: 'Highest power', highestLevel: 'Highest level', highestQuality: 'Highest quality',
             shinyOnly: 'Shiny only', minIv: 'Min IV', maxIv: 'Max IV', minLevel: 'Min level', maxLevel: 'Max level', minQuality: 'Min quality', maxQuality: 'Max quality', allTypes: 'All types',
@@ -737,6 +737,7 @@
             box-shadow: none;
             display: inline-flex; align-items: center; justify-content: center;
         }
+        #dock-btn-quick-tp[hidden] { display: none !important; }
         #dock-btn-quick-tp { color: #ffcc00; font-size: 16px; font-weight: bold; }
         #dock-btn-shops { color: #9ae6b4; font-size: 15px; }
         #dock-btn-depot { color: #90cdf4; font-size: 15px; }
@@ -907,6 +908,7 @@
         .mk-bulk-btn:hover { background: #1a365d; border-color: #3182ce; color: #fff; }
         .hunt-sell-list { max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
         .hunt-sell-row { display: grid; grid-template-columns: auto 1fr 80px; align-items: center; gap: 8px; background: #14222d; border: 1px solid #1a2d3a; border-radius: 5px; padding: 7px 9px; }
+        .hunt-sell-row[hidden] { display: none !important; }
         .hunt-sell-row input[type="number"] { width: 100%; box-sizing: border-box; background: #0c161f; color: #e2e8f0; border: 1px solid #273f52; border-radius: 4px; padding: 5px; }
         .hunt-sell-row.protected { opacity: 0.45; }
 
@@ -978,6 +980,12 @@
             box-shadow: 0 20px 55px rgba(0,0,0,.82) !important; padding-bottom: 12px;
         }
         .ha-compare-modal .ha-title { position: sticky; top: 0; z-index: 2; background: #12222e; padding: 11px 13px; }
+        .ha-compare-modal .ha-title { display: flex !important; align-items: center; gap: 8px; }
+        .ha-compare-modal .ha-title > span { flex: 1 1 auto; min-width: 0; }
+        .ha-compare-modal .ha-x {
+            position: static !important; inset: auto !important; flex: 0 0 auto;
+            width: 30px !important; height: 30px !important; margin: 0 !important;
+        }
         .ha-compare-table { width: 100%; min-width: 500px; border-collapse: separate; border-spacing: 0 5px; font-size: 13px; }
         .ha-compare-table th { text-align: center; padding: 8px; color: #91a7b8; font-weight: 600; }
         .ha-compare-table td { padding: 9px; background:#101f2a; text-align: center; font-weight: bold; }
@@ -1046,7 +1054,10 @@
     function isChatActive() { return localStorage.getItem(STORAGE_CHAT_ACTIVE) === 'true'; }
     function setChatActive(state) { localStorage.setItem(STORAGE_CHAT_ACTIVE, state ? 'true' : 'false'); applyChatState(); }
 
-    function getNavTpMode() { return localStorage.getItem(STORAGE_NAV_MODE) || 'fav'; }
+    function getNavTpMode() {
+        const mode = localStorage.getItem(STORAGE_NAV_MODE) || 'fav';
+        return ['fav', 'last', 'off'].includes(mode) ? mode : 'fav';
+    }
     function setNavTpMode(mode) { localStorage.setItem(STORAGE_NAV_MODE, mode); updateNavButtonAppearance(); }
 
     function getDropMode() { return localStorage.getItem(STORAGE_DROP_MODE) || 'icon'; }
@@ -1335,14 +1346,17 @@
     }
 
     function handleNavQuickTP() {
-        if (getNavTpMode() === 'fav') teleportToFavorite();
-        else teleportToLastHunt();
+        const mode = getNavTpMode();
+        if (mode === 'fav') teleportToFavorite();
+        else if (mode === 'last') teleportToLastHunt();
     }
 
     function updateNavButtonAppearance() {
         const tpBtn = document.getElementById('dock-btn-quick-tp');
         if (!tpBtn) return;
         const mode = getNavTpMode();
+        tpBtn.hidden = mode === 'off';
+        if (mode === 'off') return;
         tpBtn.innerHTML = mode === 'fav' ? '★' : '↺';
         const primary = getPrimaryFavorite();
         tpBtn.title = mode === 'fav'
@@ -1506,6 +1520,7 @@
                         <div class="cfg-seg" style="display: flex; gap: 4px;">
                             <button class="cfg-seg-btn ${navMode === 'fav' ? 'on' : ''} btn-nav-fav" type="button" style="flex:1;">★ ${tr('favorite')}</button>
                             <button class="cfg-seg-btn ${navMode === 'last' ? 'on' : ''} btn-nav-last" type="button" style="flex:1;">↺ ${tr('last')}</button>
+                            <button class="cfg-seg-btn ${navMode === 'off' ? 'on' : ''} btn-nav-off" type="button" style="flex:1;">${tr('none')}</button>
                         </div>
                     </div>
 
@@ -1586,6 +1601,7 @@
 
             modsContent.querySelector('.btn-nav-fav').addEventListener('click', () => { setNavTpMode('fav'); updateModsUI(); });
             modsContent.querySelector('.btn-nav-last').addEventListener('click', () => { setNavTpMode('last'); updateModsUI(); });
+            modsContent.querySelector('.btn-nav-off').addEventListener('click', () => { setNavTpMode('off'); updateModsUI(); });
 
             modsContent.querySelector('.btn-drop-hover').addEventListener('click', () => { setDropMode('hover'); updateModsUI(); });
             modsContent.querySelector('.btn-drop-icon').addEventListener('click', () => { setDropMode('icon'); updateModsUI(); });
@@ -2535,7 +2551,8 @@
                     ? requestGameEvent('inventory', 'inv-get', latestInventory).then(async entries => {
                         if (!entries.length) return readSellableInventoryFromDOM();
                         const payload = await fetch(ITEMS_JSON_URL).then(response => response.json());
-                        const catalog = new Map((payload.items || []).map(item => [String(item.id), item]));
+                        const catalogItems = Array.isArray(payload) ? payload : (payload.items || []);
+                        const catalog = new Map(catalogItems.map(item => [String(item.id), item]));
                         return entries.map(entry => {
                             const catalogItem = catalog.get(String(entry.itemId));
                             return {
@@ -2684,6 +2701,16 @@
                     <button class="hunt-sell-close" type="button" style="margin-left:auto;background:none;border:0;color:#a0aec0;font-size:20px;cursor:pointer;">×</button>
                 </div>
                 <div class="sell-confirm-body">
+                    <div class="hunt-pokemon-filters" style="display:grid;grid-template-columns:minmax(140px,1fr) auto auto auto;gap:6px;margin-bottom:8px;">
+                        <input class="hunt-pokemon-search" type="search" placeholder="Buscar Pokémon..." style="min-width:0;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 8px;">
+                        <select class="hunt-pokemon-shiny-filter" style="background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                            <option value="">Todos</option>
+                            <option value="shiny">✨ Shiny</option>
+                            <option value="normal">Normais</option>
+                        </select>
+                        <input class="hunt-pokemon-iv-filter" type="number" min="0" max="192" placeholder="IV mín." style="width:72px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                        <input class="hunt-pokemon-quality-filter" type="number" min="0" step="0.01" placeholder="Qual. mín." style="width:82px;background:#0c161f;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px;">
+                    </div>
                     <div class="hunt-sell-status" style="color:#a0aec0;text-align:center;padding:8px;">Carregando Pokémon...</div>
                     <div class="hunt-sell-list"></div>
                     <div class="sell-confirm-footer" style="display:none;">
@@ -2707,10 +2734,18 @@
         const list = backdrop.querySelector('.hunt-sell-list');
         const footer = backdrop.querySelector('.sell-confirm-footer');
         const submit = backdrop.querySelector('.hunt-pokemon-submit');
+        const pokeSearch = backdrop.querySelector('.hunt-pokemon-search');
+        const shinyFilter = backdrop.querySelector('.hunt-pokemon-shiny-filter');
+        const ivFilter = backdrop.querySelector('.hunt-pokemon-iv-filter');
+        const qualityFilter = backdrop.querySelector('.hunt-pokemon-quality-filter');
 
         try {
             const [pokemon, shopData] = await Promise.all([
-                requestGameEvent('pokes', 'pokes-get', latestPokemon),
+                (async () => {
+                    const contextPokemon = await requestPokemonTeamFromGameContext(2200);
+                    if (contextPokemon.length) return contextPokemon;
+                    return requestGameEvent('pokes', 'pokes-get', latestPokemon);
+                })(),
                 gameApiRequest('/api/game/shop')
             ]);
             const sellable = pokemon.filter(poke => !poke.team && !poke.starter && Number(poke.sellValue) > 0);
@@ -2725,6 +2760,10 @@
                 const row = document.createElement('label');
                 row.className = `hunt-sell-row${protectedPoke ? ' protected' : ''}`;
                 row.style.gridTemplateColumns = 'auto 1fr auto';
+                row.dataset.searchName = String(poke.name || '').toLocaleLowerCase();
+                row.dataset.shiny = poke.shiny ? 'true' : 'false';
+                row.dataset.iv = String(Number(poke.ivTotal) || 0);
+                row.dataset.quality = String(Number(poke.quality) || 0);
 
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
@@ -2752,8 +2791,32 @@
                     .reduce((sum, checkbox) => sum + Number(checkbox.dataset.value || 0), 0);
                 status.textContent = `Saldo atual: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Venda selecionada: 💲${total.toLocaleString('pt-BR')}`;
             };
+            const applyPokemonFilters = () => {
+                const query = pokeSearch.value.trim().toLocaleLowerCase();
+                const minIv = ivFilter.value === '' ? null : Number(ivFilter.value);
+                const minQuality = qualityFilter.value === '' ? null : Number(qualityFilter.value);
+                let visible = 0;
+                list.querySelectorAll('.hunt-sell-row').forEach(row => {
+                    const shinyMatches = !shinyFilter.value
+                        || (shinyFilter.value === 'shiny' && row.dataset.shiny === 'true')
+                        || (shinyFilter.value === 'normal' && row.dataset.shiny !== 'true');
+                    const show = (!query || row.dataset.searchName.includes(query))
+                        && shinyMatches
+                        && (minIv === null || Number(row.dataset.iv) >= minIv)
+                        && (minQuality === null || Number(row.dataset.quality) >= minQuality);
+                    row.hidden = !show;
+                    if (show) visible++;
+                });
+                const selectedTotal = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'))
+                    .reduce((sum, checkbox) => sum + Number(checkbox.dataset.value || 0), 0);
+                status.textContent = `${visible.toLocaleString('pt-BR')} Pokémon exibido(s) · Saldo: 💲${Number(shopData.gold || 0).toLocaleString('pt-BR')} · Selecionado: 💲${selectedTotal.toLocaleString('pt-BR')}`;
+            };
             list.addEventListener('change', updateSummary);
+            [pokeSearch, shinyFilter, ivFilter, qualityFilter].forEach(control => {
+                control.addEventListener('input', applyPokemonFilters);
+            });
             updateSummary();
+            applyPokemonFilters();
 
             submit.addEventListener('click', async () => {
                 const pokeIds = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'))
@@ -2793,6 +2856,11 @@
         return [];
     }
 
+    function normalizeMarketCurrency(value) {
+        const currency = String(value || 'GOLD').trim().toUpperCase();
+        return /DIAM|^DD$/.test(currency) ? 'DIAMONDS' : 'GOLD';
+    }
+
     function showGlobalMarketWindow() {
         document.querySelector('.script-market-backdrop')?.remove();
         const backdrop = document.createElement('div');
@@ -2823,6 +2891,11 @@
                         <option value="level-desc">${tr('highestLevel')}</option>
                         <option value="quality-desc">${tr('highestQuality')}</option>
                     </select>
+                    <select class="market-currency" title="${tr('currency')}" style="background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
+                        <option value="">${tr('currency')}: ${tr('all')}</option>
+                        <option value="GOLD">💲 ${tr('gold')}</option>
+                        <option value="DIAMONDS">💎 DD</option>
+                    </select>
                     <input class="market-search" type="search" placeholder="${tr('search')}" style="flex:1;min-width:180px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
                     <label style="display:flex;align-items:center;gap:5px;color:#a0aec0;font-size:12px;"><input class="market-show-offers" type="checkbox" checked> ${tr('showOffers')}</label>
                 </div>
@@ -2849,6 +2922,7 @@
         const search = backdrop.querySelector('.market-search');
         const categorySelect = backdrop.querySelector('.market-category');
         const sortSelect = backdrop.querySelector('.market-sort');
+        const currencySelect = backdrop.querySelector('.market-currency');
         const showOffers = backdrop.querySelector('.market-show-offers');
         const pokemonFilters = backdrop.querySelector('.market-pokemon-filters');
         const shinyOnly = backdrop.querySelector('.market-shiny-only');
@@ -2868,6 +2942,8 @@
                 const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '';
                 if (query && !String(name).toLocaleLowerCase().includes(query)) return false;
                 if (!showOffers.checked && (entry.offerOnly || Number(entry.price) <= 0)) return false;
+                const entryCurrency = normalizeMarketCurrency(entry.currency || entry.currencyType || ref.currency || ref.currencyType);
+                if (currencySelect.value && entryCurrency !== currencySelect.value) return false;
                 if (activeCategory === 'Pokemon') {
                     const iv = Number(entry.ivTotal ?? -1);
                     const level = Number(entry.level ?? -1);
@@ -2919,7 +2995,7 @@
                     quality != null ? `Q: ${Number(quality).toFixed(2)}` : ''
                 ].filter(Boolean).join(' · ');
                 const offerOnly = Boolean(entry.offerOnly || price <= 0);
-                const currency = String(entry.currency || 'GOLD').toUpperCase();
+                const currency = normalizeMarketCurrency(entry.currency || entry.currencyType || ref.currency || ref.currencyType);
                 const currencyIcon = currency === 'DIAMONDS' ? '💎' : '💲';
                 row.innerHTML = `
                     <div><b>${escapeHTML(name)}</b>${details ? `<small style="display:block;color:#90cdf4;margin-top:2px;">${escapeHTML(details)}</small>` : ''}${statText ? `<small style="display:block;color:#a0aec0;margin-top:2px;">${escapeHTML(statText)}</small>` : ''}</div>
@@ -3019,7 +3095,7 @@
             }
             load();
         });
-        [search, sortSelect, showOffers, shinyOnly, ivMin, ivMax, levelMin, levelMax, qualityMin, qualityMax, typeSelect].forEach(control => control.addEventListener('input', () => {
+        [search, sortSelect, currencySelect, showOffers, shinyOnly, ivMin, ivMax, levelMin, levelMax, qualityMin, qualityMax, typeSelect].forEach(control => control.addEventListener('input', () => {
             renderLimit = 100;
             render();
         }));
@@ -3205,6 +3281,14 @@
         return markCatalogPromise;
     }
 
+    function setNativeInputValue(input, value) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (setter) setter.call(input, String(value));
+        else input.value = String(value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     function injectMarkBuyQuantities(mkWindow) {
         const quantityBar = mkWindow.querySelector('.mk-qtybar');
         const quantityInput = quantityBar?.querySelector('input.mk-qty');
@@ -3220,7 +3304,7 @@
             button.textContent = quantity.toLocaleString('pt-BR');
             button.addEventListener('click', () => {
                 mkWindow.dataset.scriptBuyQty = String(quantity);
-                quantityInput.value = String(quantity);
+                setNativeInputValue(quantityInput, quantity);
                 presets.querySelectorAll('button').forEach(item => item.classList.toggle('on', item === button));
             });
             presets.appendChild(button);
@@ -3241,16 +3325,27 @@
                 if (!name) return;
                 buyButton.disabled = true;
                 try {
-                    const catalog = await loadMarkCatalog();
+                    const [catalog, characterData] = await Promise.all([
+                        loadMarkCatalog(),
+                        gameApiRequest('/api/characters/me').catch(() => null)
+                    ]);
                     const ball = catalog.balls?.find(item => item.name === name);
                     const item = catalog.items?.find(entry => entry.name === name);
                     const product = ball || item;
                     if (!product) throw new Error('Produto não encontrado.');
+                    const displayedGold = parseGameNumber(mkWindow.querySelector('.mk-gold')?.textContent);
+                    const currentGold = Math.max(
+                        0,
+                        Number(characterData?.character?.gold || 0),
+                        Number(characterData?.gold || 0),
+                        Number(displayedGold || 0),
+                        Number(catalog.gold || 0)
+                    );
                     const confirmed = await new Promise(resolve => showPurchaseConfirm({
                         name,
                         quantity,
                         unitPrice: Number(product.priceGold) || 0,
-                        currentGold: Number(catalog.gold) || 0
+                        currentGold
                     }, resolve));
                     if (!confirmed) return;
                     const payload = ball ? { ballId: product.id, qty: quantity } : { itemId: product.id, qty: quantity };
@@ -3262,6 +3357,11 @@
                     if (gold && result.gold !== undefined) gold.textContent = `💲 ${Number(result.gold).toLocaleString('pt-BR')}`;
                     markCatalogPromise = null;
                     showWindowMessage(mkWindow, `Compra concluída: ${quantity.toLocaleString('pt-BR')}× ${name}`);
+                    setTimeout(() => {
+                        const currentInput = mkWindow.querySelector('.mk-qty');
+                        if (currentInput) setNativeInputValue(currentInput, quantity);
+                        mkWindow.dataset.scriptBuyQty = String(quantity);
+                    }, 0);
                 } catch (error) {
                     showWindowMessage(mkWindow, `Não foi possível concluir a compra: ${error.message}`, true);
                 } finally {
@@ -3770,7 +3870,6 @@
             <div class="ha-window ha-compare-modal" style="position: relative; box-shadow: 0 12px 32px rgba(0,0,0,0.8);">
                 <div class="ha-title">
                     <span>⚖️ Comparação de Hunts</span>
-                    <button class="ha-sbtn ha-history-clear" type="button" style="margin-left:auto;">Limpar histórico</button>
                     <button class="ha-x ha-compare-close" aria-label="Close" type="button">×</button>
                 </div>
                 <div style="padding: 12px;">
@@ -3785,7 +3884,10 @@
                         <tr><td>💀 Defeated</td><td>${last.defeated}</td><td>${curr.defeated}</td></tr>
                     </table>
                     <div style="margin-top:12px;border-top:1px solid #263b4c;padding-top:10px;">
-                        <b style="color:#dce7f1;">Histórico recente</b>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <b style="color:#dce7f1;flex:1;">Histórico recente</b>
+                            <button class="ha-sbtn ha-history-clear" type="button">Limpar histórico</button>
+                        </div>
                         <div class="ha-history-list" style="display:grid;gap:6px;margin-top:8px;max-height:150px;overflow:auto;">
                             ${huntHistory.length ? huntHistory.slice(0, 10).map(session => `
                                 <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;background:#101d27;border-radius:6px;padding:7px 9px;color:#aebdca;font-size:12px;">

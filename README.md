@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.10.9-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.10-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -54,6 +54,7 @@ Esse botão fica na barra principal.
 
 - **⭐ Favorita:** leva você diretamente para a primeira hunt marcada como favorita.
 - **↻ Última hunt:** leva você para a última hunt visitada.
+- **Desativado:** esconde o atalho de teleporte da barra.
 
 É possível escolher o comportamento em **Configurações → Script Mods → Ação do botão de teleporte**.
 
@@ -223,6 +224,8 @@ Clique em **Pokémon** na janela de venda para trocar de tela. A lista mostra in
 - preço de venda;
 - dados usados pelas proteções de raridade.
 
+É possível filtrar a lista por nome, Shiny ou normal, IV mínimo e qualidade mínima. A leitura tenta primeiro o cache interno do jogo, tornando a janela mais confiável quando existem várias abas abertas.
+
 Pokémon Lendários, Míticos e Divinos podem ser automaticamente excluídos da seleção em massa. Essa proteção pode ser ligada ou desligada nas configurações.
 
 ## Loja do Mark em Cerulean
@@ -260,7 +263,7 @@ O nome do vendedor é omitido para deixar a lista mais simples.
 
 ### Filtros
 
-O painel possui filtros inspirados no mercado normal do jogo. Dependendo da aba, você pode filtrar ou organizar por nome, categoria, tipo, qualidade, IV e preço.
+O painel possui filtros inspirados no mercado normal do jogo. Dependendo da aba, você pode filtrar ou organizar por nome, categoria, tipo, qualidade, IV, preço e moeda — **Dólar** ou **DD**.
 
 A opção **Oferta** identifica anúncios sem preço definido.
 
@@ -284,6 +287,8 @@ O modo compacto e a exibição de drops são lembrados pelo navegador.
 O painel reduzido pode ser redimensionado pelo canto. Quando os drops estão visíveis, a lista aproveita a altura disponível conforme a janela é expandida.
 
 O Analyzer também funciona no modo de batalha **Cartas**. Ao retornar para a aba do jogo, o mod resincroniza a visibilidade da renderização para evitar que a tela permaneça no estado escuro de economia de recursos.
+
+O comparador mantém o botão de fechar separado das demais ações. A opção de limpar o histórico fica junto do histórico recente, evitando sobreposição em janelas menores.
 
 ### Comparador de hunts
 
@@ -333,7 +338,7 @@ Abra a engrenagem do jogo e selecione a aba **Script Mods**. As opções estão 
 |---|---|
 | Mapa simplificado | Alterna entre a lista do script e o mapa normal |
 | Visualização de drops | Escolhe Ícone, Hover ou Oculto |
-| Ação do teleporte | Escolhe Favorita ou Última hunt |
+| Ação do teleporte | Escolhe Favorita, Última hunt ou Desativado |
 | Exibir chat | Mostra ou esconde o chat |
 | Fast Travel da Pokédex | Permite teleportar clicando na Pokédex |
 | Mercado Global nas hunts | Liga ou desliga o mercado portátil |
@@ -368,7 +373,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.10.9**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.10**.
 
 ## Solução de problemas
 
