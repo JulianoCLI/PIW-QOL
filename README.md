@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.10.10-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.11-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -267,10 +267,7 @@ O painel possui filtros inspirados no mercado normal do jogo. Dependendo da aba,
 
 A opção **Oferta** identifica anúncios sem preço definido.
 
-O checkbox para mostrar ofertas funciona assim:
-
-- **marcado:** mostra anúncios normais e ofertas;
-- **desmarcado:** mostra somente itens ou Pokémon que possuem preço.
+Os checkboxes **Dólar** e **Diamantes** funcionam de forma independente. Deixe ambos marcados para visualizar todo o mercado ou desmarque uma moeda para ocultar seus anúncios. Ofertas continuam aparecendo normalmente.
 
 Filtros atuam sobre os anúncios carregados. Use **Atualizar** quando quiser buscar novamente os dados do mercado.
 
@@ -373,7 +370,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.10.10**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.11**.
 
 ## Solução de problemas
 

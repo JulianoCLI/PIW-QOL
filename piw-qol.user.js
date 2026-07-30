@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pokémon Map & Hunt Enhancer Pro
 // @namespace    http://tampermonkey.net/
-// @version      9.10.10
+// @version      9.10.11
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -2891,13 +2891,9 @@
                         <option value="level-desc">${tr('highestLevel')}</option>
                         <option value="quality-desc">${tr('highestQuality')}</option>
                     </select>
-                    <select class="market-currency" title="${tr('currency')}" style="background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
-                        <option value="">${tr('currency')}: ${tr('all')}</option>
-                        <option value="GOLD">💲 ${tr('gold')}</option>
-                        <option value="DIAMONDS">💎 DD</option>
-                    </select>
                     <input class="market-search" type="search" placeholder="${tr('search')}" style="flex:1;min-width:180px;background:#071018;color:#e2e8f0;border:1px solid #273f52;border-radius:5px;padding:6px 9px;">
-                    <label style="display:flex;align-items:center;gap:5px;color:#a0aec0;font-size:12px;"><input class="market-show-offers" type="checkbox" checked> ${tr('showOffers')}</label>
+                    <label style="display:flex;align-items:center;gap:5px;color:#a0aec0;font-size:12px;"><input class="market-show-gold" type="checkbox" checked> 💲 ${tr('gold')}</label>
+                    <label style="display:flex;align-items:center;gap:5px;color:#a0aec0;font-size:12px;"><input class="market-show-diamonds" type="checkbox" checked> 💎 ${tr('diamonds')}</label>
                 </div>
                 <div class="market-pokemon-filters" style="display:none;gap:6px;padding:7px 12px 0;flex-wrap:wrap;">
                     <label style="display:flex;align-items:center;gap:5px;color:#a0aec0;font-size:12px;"><input class="market-shiny-only" type="checkbox"> ${tr('shinyOnly')}</label>
@@ -2922,8 +2918,8 @@
         const search = backdrop.querySelector('.market-search');
         const categorySelect = backdrop.querySelector('.market-category');
         const sortSelect = backdrop.querySelector('.market-sort');
-        const currencySelect = backdrop.querySelector('.market-currency');
-        const showOffers = backdrop.querySelector('.market-show-offers');
+        const showGold = backdrop.querySelector('.market-show-gold');
+        const showDiamonds = backdrop.querySelector('.market-show-diamonds');
         const pokemonFilters = backdrop.querySelector('.market-pokemon-filters');
         const shinyOnly = backdrop.querySelector('.market-shiny-only');
         const ivMin = backdrop.querySelector('.market-iv-min');
@@ -2941,9 +2937,9 @@
                 const ref = entry.item || entry.pokemon || entry.product || {};
                 const name = entry.name || entry.title || entry.itemName || entry.pokemonName || ref.name || ref.title || '';
                 if (query && !String(name).toLocaleLowerCase().includes(query)) return false;
-                if (!showOffers.checked && (entry.offerOnly || Number(entry.price) <= 0)) return false;
                 const entryCurrency = normalizeMarketCurrency(entry.currency || entry.currencyType || ref.currency || ref.currencyType);
-                if (currencySelect.value && entryCurrency !== currencySelect.value) return false;
+                if (entryCurrency === 'GOLD' && !showGold.checked) return false;
+                if (entryCurrency === 'DIAMONDS' && !showDiamonds.checked) return false;
                 if (activeCategory === 'Pokemon') {
                     const iv = Number(entry.ivTotal ?? -1);
                     const level = Number(entry.level ?? -1);
@@ -3095,7 +3091,7 @@
             }
             load();
         });
-        [search, sortSelect, currencySelect, showOffers, shinyOnly, ivMin, ivMax, levelMin, levelMax, qualityMin, qualityMax, typeSelect].forEach(control => control.addEventListener('input', () => {
+        [search, sortSelect, showGold, showDiamonds, shinyOnly, ivMin, ivMax, levelMin, levelMax, qualityMin, qualityMax, typeSelect].forEach(control => control.addEventListener('input', () => {
             renderLimit = 100;
             render();
         }));
