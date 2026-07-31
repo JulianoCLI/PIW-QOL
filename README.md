@@ -107,6 +107,7 @@ Ao abrir o mapa, você pode usar uma lista organizada no lugar do mapa gráfico 
 - efetividade do seu Pokémon ativo;
 - drops;
 - indicação de que você já está naquela hunt;
+- uma pokébola ao lado do nome, colorida se o Pokémon já foi capturado e apagada (cinza) se ainda não;
 - estrela para adicionar aos favoritos.
 
 Você pode ordenar as hunts por:
@@ -127,6 +128,17 @@ O mapa também considera o nível do treinador:
 - a pesquisa também encontra hunts pelo nome de seus drops.
 
 O último filtro e a última ordenação utilizados ficam salvos no navegador.
+
+### Filtro de capturados
+
+Dois botões na barra do mapa permitem restringir a lista pelo status de captura:
+
+- **✓ Capturados:** mostra somente hunts de Pokémon que você já capturou;
+- **✗ Não Capturados:** mostra somente hunts de Pokémon que você ainda não tem no seu Pokédex.
+
+Clicar novamente no botão ativo remove o filtro. Esses filtros usam o mesmo dado da sua Pokédex e podem ser combinados com o filtro de tipo, nível e favoritos.
+
+**Vantagem para a profissão Treinador de Prestígio:** o rank dessa profissão evolui com base no número de **espécies diferentes capturadas**. Usar o filtro **✗ Não Capturados** é a forma mais rápida de descobrir quais Pokémon ainda faltam no seu Pokédex e ir direto para as hunts certas, sem precisar visitar espécies repetidas — acelerando a subida de rank (de Aprendiz até Mestre Pokémon).
 
 ### Verificar melhor hunt
 

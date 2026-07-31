@@ -97,6 +97,7 @@
     const STORAGE_HA_DROPS = 'script_ha_drops_v1';
     const STORAGE_DEX_FILTER = 'script_dex_filter_v1';
     const STORAGE_DEX_SORT_VALUE = 'script_dex_sort_value_v1';
+    const STORAGE_CAUGHT_POKEMON = 'script_caught_pokemon_v1';
     const STORAGE_HUNT_MARKET = 'script_hunt_market_v1';
     const STORAGE_HUNT_BULK_BUY = 'script_hunt_bulk_buy_v1';
     const STORAGE_HUNT_SELL = 'script_hunt_sell_v1';
@@ -112,6 +113,7 @@
     const globalCreatureApiData = new Map();
     const globalItemApiData = new Map();
     const globalHuntMarkerData = new Map();
+    const globalCaughtPokemonNames = new Set(loadCaughtPokemonCache());
     let mapMarkersLoadPromise = null;
     let itemDataLoadPromise = null;
 
@@ -228,7 +230,8 @@
         const fallback = {
             sort: 'price_desc',
             type: '',
-            access: 'all'
+            access: 'all',
+            captured: ''
         };
         try {
             const parsed = JSON.parse(localStorage.getItem(STORAGE_MAP_FILTERS) || 'null');
@@ -524,6 +527,7 @@
                     POKEMON_TYPES = { ...BASE_POKEMON_TYPES, ...fetchedTypes };
                     buildSimpleList();
                     refreshDexEnhancements();
+                    loadCaughtPokedexData();
                 }
             }
         } catch (e) {
@@ -930,6 +934,17 @@
         .dex-fbtn { padding: 4px 10px; border: 1px solid #273f52; background: #0c161f; color: #a0aec0; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
         .dex-fbtn:hover { border-color: #3182ce; color: #e2e8f0; }
         .dex-fbtn.on { background: #3182ce; color: #fff; border-color: #3182ce; }
+
+        .hunt-capture-badge {
+            display: inline-block; width: 13px; height: 13px; min-width: 13px; border-radius: 50%;
+            border: 1px solid #1a1a1a; position: relative; flex-shrink: 0;
+            background: linear-gradient(to bottom, #e53e3e 0%, #e53e3e 46%, #1a1a1a 46%, #1a1a1a 54%, #f7fafc 54%, #f7fafc 100%);
+        }
+        .hunt-capture-badge::after {
+            content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
+            background: #f7fafc; border: 1px solid #1a1a1a; border-radius: 50%; transform: translate(-50%, -50%);
+        }
+        .hunt-capture-badge.not-caught { filter: grayscale(1) brightness(0.65); opacity: 0.5; }
         .dex-ft-label { display: flex; align-items: center; gap: 4px; color: #a0aec0; font-size: 12px; cursor: pointer; margin-left: auto; }
         .dex-ft-label input { cursor: pointer; }
         .dex-cell.dex-hidden { display: none !important; }
@@ -1100,6 +1115,44 @@
     function setDexFilter(val) { localStorage.setItem(STORAGE_DEX_FILTER, val); }
     function isDexSortedByValue() { return localStorage.getItem(STORAGE_DEX_SORT_VALUE) === 'true'; }
     function setDexSortedByValue(val) { localStorage.setItem(STORAGE_DEX_SORT_VALUE, val ? 'true' : 'false'); }
+    function loadCaughtPokemonCache() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(STORAGE_CAUGHT_POKEMON) || '[]');
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+    function saveCaughtPokemonCache() {
+        localStorage.setItem(STORAGE_CAUGHT_POKEMON, JSON.stringify([...globalCaughtPokemonNames]));
+    }
+    // A API /api/game/pokedex é a fonte confiável do status "capturado" (por pokeId);
+    // o resultado fica em cache (nomes) para que o filtro/badge do mapa funcionem sem depender da Pokédex estar aberta.
+    let caughtPokedexPromise = null;
+    function loadCaughtPokedexData(force = false) {
+        if (!force && caughtPokedexPromise) return caughtPokedexPromise;
+        caughtPokedexPromise = gameApiRequest('/api/game/pokedex')
+            .then(payload => {
+                const species = Array.isArray(payload?.species) ? payload.species : [];
+                const caughtIds = new Set(species.filter(s => s?.caught).map(s => Number(s.id)));
+                let changed = false;
+                for (const [name, poke] of globalCreatureApiData.entries()) {
+                    const pokeId = Number(poke?.pokeId ?? poke?.id);
+                    if (Number.isFinite(pokeId) && caughtIds.has(pokeId) && !globalCaughtPokemonNames.has(name)) {
+                        globalCaughtPokemonNames.add(name);
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    saveCaughtPokemonCache();
+                    lastMapRenderSignature = '';
+                    buildSimpleList();
+                }
+            })
+            .catch(error => console.warn('⚠️ Falha ao carregar status de captura da Pokédex.', error))
+            .finally(() => { caughtPokedexPromise = null; });
+        return caughtPokedexPromise;
+    }
     function isHuntMarketActive() { return localStorage.getItem(STORAGE_HUNT_MARKET) !== 'false'; }
     function setHuntMarketActive(val) { localStorage.setItem(STORAGE_HUNT_MARKET, val ? 'true' : 'false'); }
     function isHuntBulkBuyActive() { return localStorage.getItem(STORAGE_HUNT_BULK_BUY) !== 'false'; }
@@ -1840,7 +1893,40 @@
                 accessSelect.value = savedFilters.access || 'all';
                 bestHuntButton.addEventListener('click', openBestHuntForLeader);
                 customFilterBar.addEventListener('change', () => {
-                    setMapFilters({ sort: sortSelect.value, type: typeSelect.value, access: accessSelect.value });
+                    setMapFilters({ ...getMapFilters(), sort: sortSelect.value, type: typeSelect.value, access: accessSelect.value });
+                    lastMapRenderSignature = '';
+                    isRendering = false;
+                    buildSimpleList();
+                });
+            }
+
+            let captureFilterBar = document.getElementById('custom-hunts-capture-bar');
+            if (!captureFilterBar) {
+                const savedFilters = getMapFilters();
+                captureFilterBar = document.createElement('div');
+                captureFilterBar.id = 'custom-hunts-capture-bar';
+                captureFilterBar.className = 'dex-script-controls';
+                captureFilterBar.style = 'margin-top: 4px; border-top: none; padding: 0;';
+                captureFilterBar.innerHTML = `
+                    <button class="dex-fbtn" data-captured="yes" type="button" title="Mostrar apenas pokémons já capturados">✓ Capturados</button>
+                    <button class="dex-fbtn" data-captured="no" type="button" title="Mostrar apenas pokémons ainda não capturados">✗ Não Capturados</button>
+                `;
+                mapBody.appendChild(captureFilterBar);
+
+                captureFilterBar.dataset.active = savedFilters.captured || '';
+                captureFilterBar.querySelectorAll('.dex-fbtn').forEach(btn => {
+                    btn.classList.toggle('on', btn.dataset.captured === captureFilterBar.dataset.active);
+                });
+
+                captureFilterBar.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.dex-fbtn');
+                    if (!btn) return;
+                    const clicked = btn.dataset.captured;
+                    captureFilterBar.dataset.active = captureFilterBar.dataset.active === clicked ? '' : clicked;
+                    captureFilterBar.querySelectorAll('.dex-fbtn').forEach(b => {
+                        b.classList.toggle('on', b.dataset.captured === captureFilterBar.dataset.active);
+                    });
+                    setMapFilters({ ...getMapFilters(), captured: captureFilterBar.dataset.active });
                     lastMapRenderSignature = '';
                     isRendering = false;
                     buildSimpleList();
@@ -1904,9 +1990,10 @@
                 const defenderTypes = getDefenderTypes(name);
                 const effectiveness = getOffensiveMultiplier(activePkmnTypes, defenderTypes);
                 const xpEfficiency = (details.experience && effectiveness) ? details.experience / effectiveness : Infinity;
+                const isCaught = globalCaughtPokemonNames.has(getCleanHuntName(name));
 
                 huntDataList.push({
-                    name, lvlText, requiredLevel, canAccess, isHere,
+                    name, lvlText, requiredLevel, canAccess, isHere, isCaught,
                     sellsFor: details.sellsFor,
                     numericPrice: details.numericPrice,
                     dropsHTML: details.dropsHTML,
@@ -1951,6 +2038,13 @@
                 huntDataList = huntDataList.filter(hunt => hunt.canAccess && hunt.effectiveness > 1);
             }
 
+            const capturedFilter = document.getElementById('custom-hunts-capture-bar')?.dataset.active || '';
+            if (capturedFilter === 'yes') {
+                huntDataList = huntDataList.filter(hunt => hunt.isCaught);
+            } else if (capturedFilter === 'no') {
+                huntDataList = huntDataList.filter(hunt => !hunt.isCaught);
+            }
+
             const sortVal = document.getElementById('sort-hunts-select')?.value || 'price_desc';
             huntDataList.sort((a, b) => {
                 const aFav = favorites.includes(a.name);
@@ -1974,9 +2068,9 @@
             });
 
             const renderSignature = JSON.stringify({
-                query, sortVal, selectedType, accessFilter, trainerLevel, favorites,
+                query, sortVal, selectedType, accessFilter, capturedFilter, trainerLevel, favorites,
                 rows: huntDataList.map(hunt => [
-                    hunt.name, hunt.lvlText, hunt.canAccess, hunt.isHere,
+                    hunt.name, hunt.lvlText, hunt.canAccess, hunt.isHere, hunt.isCaught,
                     hunt.numericPrice, hunt.experience, hunt.effectiveness
                 ])
             });
@@ -2039,6 +2133,7 @@
                 infoDiv.style = 'flex-grow: 1; margin-right: 12px;';
                 infoDiv.innerHTML = `
                     <div style="font-weight: bold; color: ${isFav ? '#3182ce' : '#fff'}; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <span class="hunt-capture-badge${hunt.isCaught ? '' : ' not-caught'}" title="${hunt.isCaught ? 'Já capturado' : 'Ainda não capturado'}"></span>
                         ${hunt.name}
                         <span style="font-size: 11px; background: #243b4d; padding: 2px 6px; border-radius: 4px; color: #cbd5e0;">
                             ${hunt.lvlText}
@@ -3612,7 +3707,10 @@
             return;
         }
 
-        if (dexWindow.querySelector('.dex-script-controls')) return;
+        if (dexWindow.querySelector('.dex-script-controls')) {
+            return;
+        }
+        loadCaughtPokedexData(true);
 
         const dexControls = dexWindow.querySelector('.dex-controls');
         if (!dexControls) return;
