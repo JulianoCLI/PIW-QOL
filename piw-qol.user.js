@@ -4268,13 +4268,17 @@
         }
         if (!titleNode) return null;
 
+        const tooBig = el => el.classList.contains('game-root') || el.querySelector('.game-canvas-host, .game-dock');
+
         let element = titleNode.parentElement;
         while (element && element !== document.body) {
+            if (tooBig(element)) return null;
             const text = element.textContent || '';
             if (/\bIV\s*:?\s*\d+\s*\/\s*\d+/i.test(text) && element.querySelector('button')) return element;
             element = element.parentElement;
         }
-        return titleNode.parentElement?.closest('.win-window, .prof-window, [role="dialog"]') || null;
+        const fallback = titleNode.parentElement?.closest('.win-window, .prof-window, [role="dialog"]') || null;
+        return fallback && !tooBig(fallback) ? fallback : null;
     }
 
     let captureLogEnhancementPromise = null;
