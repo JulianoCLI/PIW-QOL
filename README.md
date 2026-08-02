@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.10.12-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.13-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -15,9 +15,11 @@ O script melhora a tela do jogo e reúne funções que normalmente exigiriam vá
 - abrir lojas, Mercado Global e Depot mesmo estando dentro de uma hunt;
 - comprar grandes quantidades de itens e Poké Bolas;
 - vender itens e Pokémon com proteções contra vendas acidentais;
-- consultar anúncios do Mercado Global;
+- consultar e criar anúncios de itens e Pokémon no Mercado Global;
 - melhorar a Pokédex e o Hunt Analyzer;
 - escolher quais modificações deseja usar.
+
+A versão 9.10.13 também uniformiza fontes e barras de rolagem, permite importar fontes personalizadas, melhora a comparação de hunts e inclui auto-reconnect opcional para hunts sem atividade do servidor.
 
 Você não precisa saber programar. Depois de instalado, o script funciona dentro do próprio jogo.
 
@@ -70,6 +72,8 @@ Ao clicar, um menu aparece logo abaixo do botão. As três opções ficam dispon
 
 O menu não depende do mapa atual. Se você trocar de cidade ou hunt, as opções continuam disponíveis.
 
+A loja portátil reúne Poké Bolas, potions e revives compráveis. Idle Ball, Master Ball e outros produtos não compráveis não são exibidos.
+
 ### 📦 — Depot
 
 Abre um Depot portátil, inclusive dentro de uma hunt.
@@ -85,7 +89,16 @@ Na aba **Pokémon**:
 
 - a coluna **Equipe** mostra os Pokémon que estão com você;
 - a coluna **Box** mostra os Pokémon guardados;
-- clique em um Pokémon para movê-lo entre a equipe e o Box.
+- clique em um Pokémon para movê-lo entre a equipe e o Box;
+- use a busca por nome e os filtros mínimos/máximos de IV e qualidade para localizar Pokémon.
+
+Para contas que pertencem a uma família, o painel também mostra as abas **Família: Itens** e **Família: Pokémon**. Elas permitem depositar e retirar conteúdo do depósito compartilhado, respeitando o limite diário e o estado de congelamento da família. Movimentos de itens pedem a quantidade e movimentos de Pokémon pedem confirmação. A aba familiar de Pokémon reúne equipe e Box e oferece busca por nome e filtros mínimos/máximos de IV e qualidade.
+
+Se a conta não pertence a uma família, essas duas abas ficam ocultas. O botão **Sem família** explica por que elas não estão disponíveis.
+
+As janelas criadas pela extensão acompanham a identidade visual das janelas originais do jogo, incluindo gradiente escuro, borda dourada, títulos, abas, campos, linhas e botões.
+
+Itens e Pokémon no Depot usam os mesmos ícones oficiais exibidos pelo jogo.
 
 As quantidades e o total de espaços ocupados são mostrados no próprio painel.
 
@@ -382,7 +395,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.10.12**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.13**.
 
 ## Solução de problemas
 
