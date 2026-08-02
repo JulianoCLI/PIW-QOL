@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Pokémon Map & Hunt Enhancer Pro
+// @name         Poke Idle World - Quality of Life (PIW-QOL)
 // @namespace    http://tampermonkey.net/
 // @version      9.10.13
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
