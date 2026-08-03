@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poke Idle World - Quality of Life (PIW-QOL)
 // @namespace    http://tampermonkey.net/
-// @version      9.10.13
+// @version      9.10.14
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -25,6 +25,7 @@
     let lastSocketMessageAt = Date.now();
     let lastHuntSocketActivityAt = Date.now();
     let lastAutoReconnectAt = 0;
+    let autoReconnectInProgress = false;
 
     function handleGameSocketMessage(event) {
         let message;
@@ -93,17 +94,28 @@
         return gameSocket?.readyState === NativeWebSocket.OPEN;
     }
 
-    setInterval(() => {
-        if (!isAutoReconnectActive() || !document.querySelector('[data-guide="capture-bar"]')) return;
+    setInterval(async () => {
+        if (!isAutoReconnectActive() || autoReconnectInProgress || !document.querySelector('[data-guide="capture-bar"]')) return;
         const now = Date.now();
         const staleFor = now - lastHuntSocketActivityAt;
         if (!gameSocket || gameSocket.readyState !== NativeWebSocket.OPEN || staleFor < 75000 || now - lastAutoReconnectAt < 90000) return;
         lastAutoReconnectAt = now;
+        autoReconnectInProgress = true;
         try {
-            gameSocket.close(4000, 'PIW QOL hunt timeout');
-            showScriptNotice('A hunt ficou sem resposta do servidor. Reconectando automaticamente…', { title: 'Auto-reconnect' });
+            const previousHunt = getCurrentHuntNameForReconnect();
+            if (!previousHunt) throw new Error('A hunt atual não pôde ser identificada.');
+            showScriptNotice(`Hunt sem resposta. Indo a Cerulean por 10 segundos antes de voltar para ${previousHunt}…`, { title: 'Auto-reconnect' });
+            const reachedCerulean = await teleportToCeruleanForReconnect();
+            if (!reachedCerulean) throw new Error('Cerulean não foi localizada no mapa.');
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            await teleportToTarget(previousHunt);
+            lastHuntSocketActivityAt = Date.now();
+            showScriptNotice(`Retornando para ${previousHunt}.`, { title: 'Auto-reconnect' });
         } catch (error) {
             console.warn('Falha no auto-reconnect da hunt:', error);
+            showScriptNotice(`Não foi possível concluir o auto-reconnect: ${error.message}`, { title: 'Auto-reconnect', isError: true });
+        } finally {
+            autoReconnectInProgress = false;
         }
     }, 15000);
 
@@ -1190,10 +1202,10 @@
         .market-sell-row small { display:block;color:#9fb0bd;margin-top:3px; }
         .script-quality-multiselect { position:relative;display:inline-block;z-index:8; }
         .script-quality-toggle { min-width:170px;text-align:left; }
-        .script-quality-menu { position:absolute;top:calc(100% + 4px);left:0;min-width:190px;padding:7px;background:#101b24;border:1px solid #7a5a27;border-radius:6px;box-shadow:0 8px 22px #000b;display:grid;gap:3px; }
-        .script-quality-menu[hidden] { display:none; }
-        .script-quality-menu label { display:flex;gap:7px;align-items:center;padding:4px 5px;border-radius:4px;color:#e8dfcc;cursor:pointer; }
-        .script-quality-menu label:hover { background:#ffffff12; }
+        .script-quality-dropdown { position:absolute;min-width:190px;padding:7px;background:#101b24;border:1px solid #7a5a27;border-radius:6px;box-shadow:0 8px 22px #000b;display:grid;gap:3px;z-index:100000;pointer-events:auto; }
+        .script-quality-option { display:flex;gap:7px;align-items:center;width:100%;padding:4px 5px;border-radius:4px;background:transparent;color:#e8dfcc;cursor:pointer;box-sizing:border-box;user-select:none;pointer-events:auto; }
+        .script-quality-option:hover { background:#ffffff12; }
+        .script-quality-option input { flex:0 0 auto;margin:0;accent-color:#3182ce;pointer-events:auto; }
         .script-mark-row-buy { display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto; }
         .script-mark-row-buy .mk-bulk-btn { min-width:38px;padding:5px 7px;font-size:11px; }
         .sell-confirm-btn.no, .mk-bulk-btn, .dex-fbtn {
@@ -1615,6 +1627,51 @@
     }
     function getLastHunt() { return localStorage.getItem(STORAGE_LAST_HUNT) || null; }
 
+    function getCurrentHuntNameForReconnect() {
+        const currentMarkerName = document.querySelector('.hunt-marker.here .hunt-name')?.textContent?.trim();
+        return currentMarkerName || getLastHunt();
+    }
+
+    async function teleportToCeruleanForReconnect() {
+        await loadMapMarkersData();
+        const waitForHuntExit = async () => {
+            const deadline = Date.now() + 5000;
+            while (Date.now() < deadline) {
+                if (!document.querySelector('[data-guide="capture-bar"]')) return true;
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return !document.querySelector('[data-guide="capture-bar"]');
+        };
+        const mapButton = document.querySelector('button[data-guide="dock-map"]');
+        let mapWindow = document.querySelector('.map-window');
+        if (!mapWindow?.getClientRects().length) {
+            mapButton?.click();
+            mapWindow = await waitForElement('.map-window', 1500);
+        }
+        if (!mapWindow) return false;
+
+        const directMarker = Array.from(mapWindow.querySelectorAll('[data-guide]')).find(element =>
+            /cerulean/i.test(element.dataset.guide || '')
+        );
+        const labeledMarker = Array.from(mapWindow.querySelectorAll('button, [role="button"], .map-city, .map-marker, .hunt-marker')).find(element =>
+            /^(?:cerulean|cerulean city)$/i.test(element.textContent.trim())
+        );
+        const mappedEntry = Array.from(globalHuntMarkerData.entries()).find(([key, marker]) =>
+            /cerulean/i.test(key) || /cerulean/i.test(getMarkerName(marker)) || /cerulean/i.test(getMarkerSlug(marker))
+        );
+
+        const target = directMarker || labeledMarker;
+        if (target) {
+            target.click();
+            if (await waitForHuntExit()) return true;
+        }
+        if (mappedEntry) {
+            await teleportToTarget(getMarkerName(mappedEntry[1]) || mappedEntry[0]);
+            return waitForHuntExit();
+        }
+        return false;
+    }
+
     function getActivePokemonName() {
         const nameEl = document.querySelector('.phud-name');
         return nameEl ? nameEl.textContent.trim().toLowerCase() : '';
@@ -1926,7 +1983,7 @@
 
                     <label class="cfg-row script-mods-wide" style="background:#14222d;padding:10px;border-radius:6px;border:1px solid #1a2d3a;margin:0;display:flex;align-items:center;gap:9px;">
                         <input class="cfg-auto-reconnect" type="checkbox">
-                        <span class="cfg-label"><b style="color:#e2e8f0;font-size:14px;">Auto-reconnect da hunt</b><span style="color:#a0aec0;font-size:11px;">Reconecta o WebSocket quando a hunt fica sem atividade do servidor.</span></span>
+                        <span class="cfg-label"><b style="color:#e2e8f0;font-size:14px;">Auto-reconnect da hunt</b><span style="color:#a0aec0;font-size:11px;">Vai a Cerulean, aguarda 10 segundos e retorna à hunt quando ela fica sem atividade.</span></span>
                     </label>
                     ${[
                         ['cfg-unified-fonts', STORAGE_UNIFIED_FONTS, 'Fonte unificada', 'Aplica a fonte escolhida às janelas e controles do jogo.'],
@@ -2121,7 +2178,7 @@
                     trackHuntAnalyzer();
                     if (!event.target.checked) document.querySelector('.ha-compare-backdrop')?.remove();
                 }
-                const mkWindow = document.querySelector('.mk-window');
+                const mkWindow = findNativeMarkWindow();
                 if (mkWindow) {
                     if (!preferenceEnabled(STORAGE_MARK_QUICK_BUY)) {
                         mkWindow.querySelectorAll('.script-mark-row-buy').forEach(node => node.remove());
@@ -2130,6 +2187,8 @@
                     }
                     if (!preferenceEnabled(STORAGE_MARK_QUALITY_PICKER)) {
                         mkWindow.querySelector('.script-quality-multiselect')?.remove();
+                        mkWindow.querySelector('.script-quality-dropdown')?.remove();
+                        markQualityMenuOpen = false;
                         mkWindow.querySelectorAll('[data-script-quality-native]').forEach(button => {
                             button.style.removeProperty('display');
                             delete button.dataset.scriptQualityNative;
@@ -3446,8 +3505,27 @@
                     try {
                         const result = await sellItemsThroughShop(selectedRows.map(({ itemId, qty }) => ({ itemId, qty })));
                         latestInventory = null;
-                        close();
-                        showScriptNotice(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`, { title: 'Venda concluída' });
+                        shopData.gold = Number(result.gold ?? shopData.gold ?? 0);
+                        selectedRows.forEach(soldItem => {
+                            const checkbox = Array.from(list.querySelectorAll('input[type="checkbox"]'))
+                                .find(input => String(input.dataset.itemId) === String(soldItem.itemId));
+                            const row = checkbox?.closest('.hunt-sell-row');
+                            const quantity = row?.querySelector('input[type="number"]');
+                            if (!row || !checkbox || !quantity) return;
+                            const remaining = Math.max(0, Number(quantity.max || 0) - soldItem.qty);
+                            if (remaining === 0) {
+                                row.remove();
+                                return;
+                            }
+                            quantity.max = String(remaining);
+                            quantity.value = String(remaining);
+                            checkbox.checked = false;
+                            row.querySelector('span').textContent = `${checkbox.dataset.itemName} (${remaining.toLocaleString('pt-BR')}) · 💲${Number(checkbox.dataset.unitPrice || 0).toLocaleString('pt-BR')}`;
+                        });
+                        updateSaleSummary();
+                        showWindowMessage(backdrop.querySelector('.sell-confirm-modal'), `Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')}`);
+                        submit.disabled = false;
+                        submit.textContent = 'Vender';
                     } catch (error) {
                         console.error('Falha ao vender itens no Mark:', error);
                         status.textContent = 'Não foi possível concluir a venda. Tente novamente.';
@@ -3635,8 +3713,12 @@
                         body: JSON.stringify({ pokeIds })
                     });
                     latestPokemon = null;
-                    close();
-                    showScriptNotice(`Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')} · Saldo: 💲${Number(result.gold || 0).toLocaleString('pt-BR')}`, { title: 'Venda concluída' });
+                    shopData.gold = Number(result.gold ?? shopData.gold ?? 0);
+                    list.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => checkbox.closest('.hunt-sell-row')?.remove());
+                    applyPokemonFilters();
+                    if (!list.querySelector('.hunt-sell-row')) footer.style.display = 'none';
+                    showWindowMessage(backdrop.querySelector('.sell-confirm-modal'), `Venda concluída: +💲${Number(result.goldGained || 0).toLocaleString('pt-BR')}`);
+                    submit.disabled = false;
                     sendGameMessage({ type: 'pokes-get' });
                 } catch (error) {
                     showScriptNotice(`Não foi possível concluir a venda: ${error.message}`, { title: 'Erro na venda', isError: true });
@@ -4150,13 +4232,7 @@
                                 currentGold: Number(data.gold) || 0
                             }, resolve));
                             if (!confirmed) return;
-                            const payload = kind === 'ball'
-                                ? { ballId: product.id, qty: quantity }
-                                : { itemId: product.id, qty: quantity };
-                            const result = await gameApiRequest('/api/game/shop/buy', {
-                                method: 'POST',
-                                body: JSON.stringify(payload)
-                            });
+                            const result = await buyFromMarkShop(product, kind, quantity);
                             data.gold = Number(result.gold ?? data.gold);
                             const serverCount = kind === 'ball'
                                 ? result.counts?.[String(product.id)]
@@ -4270,6 +4346,24 @@
         return markCatalogPromise;
     }
 
+    async function buyFromMarkShop(product, kind, quantity) {
+        const requestedQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+        let remaining = requestedQuantity;
+        let result = null;
+        while (remaining > 0) {
+            const batchQuantity = Math.min(1000, remaining);
+            const payload = kind === 'ball'
+                ? { ballId: product.id, qty: batchQuantity }
+                : { itemId: product.id, qty: batchQuantity };
+            result = await gameApiRequest('/api/game/shop/buy', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            remaining -= batchQuantity;
+        }
+        return result || {};
+    }
+
     function setNativeInputValue(input, value) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
         if (setter) setter.call(input, String(value));
@@ -4278,62 +4372,114 @@
         input.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
+    let markQualityMenuOpen = false;
+
+    function findNativeMarkWindow() {
+        return Array.from(document.querySelectorAll('.mk-window')).find(windowElement => {
+            if (windowElement.classList.contains('script-market-window') || windowElement.closest('.script-market-backdrop')) return false;
+            const title = windowElement.querySelector('.ball-head, .mk-head')?.textContent || '';
+            return /(?:Loja\s+do\s+Mark|Mark(?:'s)?\s+Shop)/i.test(title);
+        }) || null;
+    }
+
+    function isMarkQualitySelected(button) {
+        return button.classList.contains('on')
+            || button.classList.contains('active')
+            || button.getAttribute('aria-pressed') === 'true'
+            || button.dataset.active === 'true'
+            || button.querySelector('input[type="checkbox"]')?.checked === true;
+    }
+
     function injectMarkQualityMultiSelect(mkWindow) {
         if (!preferenceEnabled(STORAGE_MARK_QUALITY_PICKER)) return;
         const qualityPattern = /^(?:fraca|comum|incomum|rara|épica|epica|lendária|lendaria|mítica|mitica|anciã|ancia|divina|poor|common|uncommon|rare|epic|legendary|mythic|ancient|divine)$/i;
-        const qualityButtons = Array.from(mkWindow.querySelectorAll('button')).filter(button => qualityPattern.test(button.textContent.trim()));
+        const qualityButtons = Array.from(mkWindow.querySelectorAll('button:not(.script-quality-toggle)'))
+            .filter(button => qualityPattern.test(button.textContent.trim()));
         if (qualityButtons.length < 3) return;
         const parent = qualityButtons[0].parentElement;
         const siblings = qualityButtons.filter(button => button.parentElement === parent);
         if (siblings.length < 3 || parent.querySelector('.script-quality-multiselect')) return;
+        mkWindow.querySelectorAll('.script-quality-dropdown').forEach(dropdown => dropdown.remove());
         siblings.forEach(button => { button.style.display = 'none'; button.dataset.scriptQualityNative = 'true'; });
+
         const picker = document.createElement('div');
         picker.className = 'script-quality-multiselect';
-        picker.innerHTML = '<button class="mk-bulk-btn script-quality-toggle" type="button">Qualidades: todas ▾</button><div class="script-quality-menu"></div>';
-        const menu = picker.querySelector('.script-quality-menu');
-        menu.hidden = mkWindow.dataset.scriptQualityMenuOpen !== 'true';
+        picker.innerHTML = '<button class="mk-bulk-btn script-quality-toggle" type="button" aria-haspopup="true" aria-expanded="false">Qualidades: todas ▾</button>';
         const toggle = picker.querySelector('.script-quality-toggle');
-        const updateLabel = () => {
-            const selected = Array.from(menu.querySelectorAll('input:checked')).map(input => input.dataset.label);
-            toggle.textContent = selected.length ? `Qualidades: ${selected.length} selecionada(s) ▾` : 'Qualidades: todas ▾';
+
+        const updateLabel = (dropdown = mkWindow.querySelector('.script-quality-dropdown')) => {
+            const selectedCount = dropdown
+                ? dropdown.querySelectorAll('input[type="checkbox"]:checked').length
+                : siblings.filter(isMarkQualitySelected).length;
+            toggle.textContent = selectedCount ? `Qualidades: ${selectedCount} selecionada(s) ▾` : 'Qualidades: todas ▾';
         };
-        siblings.forEach(button => {
-            const label = button.textContent.trim();
-            const option = document.createElement('label');
-            option.innerHTML = `<input type="checkbox" data-label="${escapeHTML(label)}"> <span>${escapeHTML(label)}</span>`;
-            const checkbox = option.querySelector('input');
-            checkbox.checked = button.classList.contains('on') || button.classList.contains('active') || button.getAttribute('aria-pressed') === 'true';
-            option.addEventListener('pointerdown', event => event.stopPropagation());
-            option.addEventListener('click', event => {
-                event.preventDefault();
-                event.stopPropagation();
-                checkbox.checked = !checkbox.checked;
-                mkWindow.dataset.scriptQualityMenuOpen = 'true';
-                button.click();
-                [0, 50, 150].forEach(delay => setTimeout(() => {
-                    injectMarkQualityMultiSelect(mkWindow);
-                    const currentMenu = mkWindow.querySelector('.script-quality-menu');
-                    if (currentMenu) currentMenu.hidden = false;
-                }, delay));
+
+        const closeDropdown = () => {
+            mkWindow.querySelector('.script-quality-dropdown')?.remove();
+            markQualityMenuOpen = false;
+            toggle.setAttribute('aria-expanded', 'false');
+        };
+
+        const openDropdown = () => {
+            mkWindow.querySelector('.script-quality-dropdown')?.remove();
+            const dropdown = document.createElement('div');
+            dropdown.className = 'script-quality-dropdown';
+            dropdown.setAttribute('role', 'menu');
+            siblings.forEach(button => {
+                const labelText = button.textContent.trim();
+                const option = document.createElement('label');
+                option.className = 'script-quality-option';
+                option.innerHTML = `<input type="checkbox" data-label="${escapeHTML(labelText)}"> <span>${escapeHTML(labelText)}</span>`;
+                const checkbox = option.querySelector('input');
+                checkbox.checked = isMarkQualitySelected(button);
+                checkbox.addEventListener('change', event => {
+                    event.stopPropagation();
+                    markQualityMenuOpen = true;
+                    updateLabel(dropdown);
+                    button.click();
+                    [50, 150, 300].forEach(delay => setTimeout(() => {
+                        if (!picker.isConnected || siblings.some(nativeButton => !nativeButton.isConnected)) {
+                            picker.remove();
+                            mkWindow.querySelector('.script-quality-dropdown')?.remove();
+                            injectMarkQualityMultiSelect(mkWindow);
+                            return;
+                        }
+                        const currentDropdown = mkWindow.querySelector('.script-quality-dropdown');
+                        if (currentDropdown) updateLabel(currentDropdown);
+                        else if (picker.isConnected && markQualityMenuOpen) openDropdown();
+                    }, delay));
+                });
+                dropdown.appendChild(option);
             });
-            menu.appendChild(option);
-        });
-        toggle.addEventListener('click', event => {
-            event.stopPropagation();
-            menu.hidden = !menu.hidden;
-            mkWindow.dataset.scriptQualityMenuOpen = String(!menu.hidden);
-        });
-        menu.addEventListener('click', event => event.stopPropagation());
-        const outside = event => {
-            if (!picker.isConnected) return document.removeEventListener('click', outside, true);
-            if (!picker.contains(event.target)) {
-                menu.hidden = true;
-                mkWindow.dataset.scriptQualityMenuOpen = 'false';
-            }
+            ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type => dropdown.addEventListener(type, event => event.stopPropagation()));
+            mkWindow.appendChild(dropdown);
+            const toggleRect = toggle.getBoundingClientRect();
+            const windowRect = mkWindow.getBoundingClientRect();
+            const desiredLeft = toggleRect.left - windowRect.left;
+            const maxLeft = Math.max(8, windowRect.width - dropdown.offsetWidth - 8);
+            dropdown.style.left = `${Math.max(8, Math.min(desiredLeft, maxLeft))}px`;
+            dropdown.style.top = `${toggleRect.bottom - windowRect.top + 4}px`;
+            markQualityMenuOpen = true;
+            toggle.setAttribute('aria-expanded', 'true');
+            updateLabel(dropdown);
         };
-        document.addEventListener('click', outside, true);
+
+        toggle.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (mkWindow.querySelector('.script-quality-dropdown')) closeDropdown();
+            else openDropdown();
+        });
+
+        const outside = event => {
+            if (!picker.isConnected) return document.removeEventListener('pointerdown', outside, true);
+            const dropdown = mkWindow.querySelector('.script-quality-dropdown');
+            if (!picker.contains(event.target) && !dropdown?.contains(event.target)) closeDropdown();
+        };
+        document.addEventListener('pointerdown', outside, true);
         parent.appendChild(picker);
         updateLabel();
+        if (markQualityMenuOpen) requestAnimationFrame(openDropdown);
     }
 
     function legacyInjectMarkBuyQuantities(mkWindow) {
@@ -4400,11 +4546,7 @@
                         currentGold
                     }, resolve));
                     if (!confirmed) return;
-                    const payload = ball ? { ballId: product.id, qty: quantity } : { itemId: product.id, qty: quantity };
-                    const result = await gameApiRequest('/api/game/shop/buy', {
-                        method: 'POST',
-                        body: JSON.stringify(payload)
-                    });
+                    const result = await buyFromMarkShop(product, ball ? 'ball' : 'item', quantity);
                     const gold = mkWindow.querySelector('.mk-gold');
                     if (gold && result.gold !== undefined) gold.textContent = `💲 ${Number(result.gold).toLocaleString('pt-BR')}`;
                     markCatalogPromise = null;
@@ -4456,8 +4598,7 @@
                         const currentGold = Math.max(0, parseGameNumber(mkWindow.querySelector('.mk-gold')?.textContent), Number(catalog.gold || 0));
                         const confirmed = await new Promise(resolve => showPurchaseConfirm({ name, quantity, unitPrice: Number(product.priceGold) || 0, currentGold }, resolve));
                         if (!confirmed) return;
-                        const payload = ball ? { ballId: product.id, qty: quantity } : { itemId: product.id, qty: quantity };
-                        const result = await gameApiRequest('/api/game/shop/buy', { method: 'POST', body: JSON.stringify(payload) });
+                        const result = await buyFromMarkShop(product, ball ? 'ball' : 'item', quantity);
                         const gold = mkWindow.querySelector('.mk-gold');
                         if (gold && result.gold !== undefined) gold.textContent = `💲 ${Number(result.gold).toLocaleString('pt-BR')}`;
                         const owned = row.querySelector('.script-owned-qty');
@@ -4542,13 +4683,80 @@
         }
     }
 
+    function showMarkModSettings(mkWindow) {
+        const activateMarkSettings = () => {
+            injectConfigTab();
+            const configWindow = document.querySelector('.cfg-window');
+            const modsTab = configWindow?.querySelector('.cfg-tab-mods');
+            if (!modsTab || !configWindow.getClientRects().length) return false;
+            modsTab.click();
+            requestAnimationFrame(() => {
+                const markSetting = configWindow.querySelector('.cfg-mark-quick-buy, .cfg-mark-quality-picker, .btn-mark-enhancements');
+                const section = markSetting?.closest('.script-mod-category') || markSetting?.closest('.cfg-row');
+                section?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            });
+            return true;
+        };
+        const settingsButton = Array.from(document.querySelectorAll('button')).find(button => {
+            if (button.closest('.mk-window, .cfg-window') || button.classList.contains('script-mark-settings')) return false;
+            const accessibleText = `${button.textContent || ''} ${button.title || ''} ${button.getAttribute('aria-label') || ''}`.trim();
+            return /configura|settings|ajustes|prefer[eê]ncias/i.test(accessibleText)
+                || /^⚙(?:️)?$/.test(accessibleText)
+                || button.matches('[class*="setting" i], [class*="config" i], [class*="gear" i]');
+        });
+        const closeButton = mkWindow.querySelector('.ball-head .cfg-x:not(.script-mark-settings), .mk-head .cfg-x:not(.script-mark-settings)');
+        closeButton?.click();
+        setTimeout(() => {
+            const configWindow = document.querySelector('.cfg-window');
+            if (!configWindow?.getClientRects().length) {
+                settingsButton?.click();
+                setTimeout(() => {
+                    const menuItem = Array.from(document.querySelectorAll('button, .sel-item')).find(element => {
+                        if (!element.getClientRects().length || element === settingsButton || element.closest('.cfg-window, .mk-window')) return false;
+                        return /^(?:Configurações|Settings)$/i.test(element.textContent.trim());
+                    });
+                    menuItem?.click();
+                }, 100);
+            }
+            let attempts = 0;
+            const waitForSettings = setInterval(() => {
+                attempts += 1;
+                if (activateMarkSettings() || attempts >= 40) {
+                    clearInterval(waitForSettings);
+                    if (attempts >= 40) showScriptNotice('NÃ£o foi possÃ­vel abrir as configuraÃ§Ãµes do Mark.', { title: 'ConfiguraÃ§Ãµes', isError: true });
+                }
+            }, 50);
+        }, 80);
+    }
+
+    function injectMarkSettingsButton(mkWindow) {
+        const header = mkWindow.querySelector('.ball-head, .mk-head');
+        if (!header || header.querySelector('.script-mark-settings')) return;
+        const settingsButton = document.createElement('button');
+        settingsButton.type = 'button';
+        settingsButton.className = 'cfg-x script-mark-settings';
+        settingsButton.textContent = '⚙️';
+        settingsButton.title = 'ConfiguraÃ§Ãµes do Mark';
+        settingsButton.setAttribute('aria-label', 'Abrir configuraÃ§Ãµes do Mark');
+        settingsButton.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            showMarkModSettings(mkWindow);
+        });
+        const closeButton = header.querySelector('.cfg-x');
+        if (closeButton) closeButton.before(settingsButton);
+        else header.appendChild(settingsButton);
+    }
+
     function injectShopEnhancements() {
-        const mkWindow = document.querySelector('.mk-window');
+        document.querySelectorAll('.script-market-window .script-mark-settings').forEach(button => button.remove());
+        const mkWindow = findNativeMarkWindow();
         if (!mkWindow) return;
 
         injectMarkBuyQuantities(mkWindow);
         injectMarkOwnedQuantities(mkWindow);
         injectMarkQualityMultiSelect(mkWindow);
+        injectMarkSettingsButton(mkWindow);
         
         // 1. Sell Tab: Locks & Intercept Sell
         const isSellTab = !!Array.from(mkWindow.querySelectorAll('.mk-tab'))
@@ -5328,7 +5536,7 @@
             if (document.querySelector('.cfg-window')) injectConfigTab();
             applyChatState();
             injectHuntShopLauncher();
-            if (document.querySelector('.mk-window') && isMarkEnhancementsActive()) injectShopEnhancements();
+            if (findNativeMarkWindow() && isMarkEnhancementsActive()) injectShopEnhancements();
             if (document.querySelector('.ball-window')) injectHuntBallEnhancements(document.querySelector('.ball-window'));
             if (document.querySelector('.dex-window')) injectDexEnhancements();
             if (document.querySelector('.ha-window:not(.ha-compare-modal)')) trackHuntAnalyzer();

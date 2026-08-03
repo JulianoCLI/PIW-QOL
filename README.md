@@ -1,8 +1,8 @@
-# 🎮 Pokémon Map & Hunt Enhancer Pro
+# 🎮 Poke Idle World - Quality of Life (PIW-QOL)
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-9.10.13-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-9.10.14-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -19,7 +19,7 @@ O script melhora a tela do jogo e reúne funções que normalmente exigiriam vá
 - melhorar a Pokédex e o Hunt Analyzer;
 - escolher quais modificações deseja usar.
 
-A versão 9.10.13 também uniformiza fontes e barras de rolagem, permite importar fontes personalizadas, melhora a comparação de hunts e inclui auto-reconnect opcional para hunts sem atividade do servidor.
+A versão 9.10.14 também uniformiza fontes e barras de rolagem, permite importar fontes personalizadas e melhora a comparação de hunts. O auto-reconnect opcional agora leva o personagem a Cerulean, aguarda 10 segundos e retorna à hunt anterior quando ela fica sem atividade.
 
 Você não precisa saber programar. Depois de instalado, o script funciona dentro do próprio jogo.
 
@@ -41,7 +41,7 @@ Essa extensão é o programa que permite ao navegador executar o script.
 
 ### 2. Instale o script
 
-1. Clique em [Instalar Pokémon Map & Hunt Enhancer Pro](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js).
+1. Clique em [Instalar Poke Idle World - Quality of Life (PIW-QOL)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js).
 2. A extensão abrirá uma tela com o código.
 3. Clique em **Instalar**.
 4. Abra ou atualize a página do jogo.
@@ -389,13 +389,13 @@ Normalmente o Tampermonkey ou Violentmonkey procura atualizações sozinho.
 Para atualizar manualmente:
 
 1. abra o painel da extensão;
-2. encontre **Pokémon Map & Hunt Enhancer Pro**;
+2. encontre **Poke Idle World - Quality of Life (PIW-QOL)**;
 3. procure a opção **Verificar atualizações**;
 4. atualize a página do jogo.
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **9.10.13**.
+Confira a versão no começo do script. A versão documentada neste README é a **9.10.14**.
 
 ## Solução de problemas
 
