@@ -336,7 +336,7 @@ O Hunt Analyzer também pode mostrar:
 - tempo desde a captura;
 - quantidade de Poké Bolas usadas.
 
-O Log de Capturas substitui o nível fixo 1 somente pelo número da qualidade original. O número usa a mesma cor da categoria de qualidade exibida ao lado.
+O Log de Capturas, a Equipe, o Box/Depot e as listas de venda mostram a qualidade no formato **categoria · potencial × multiplicador**. O potencial é uma estimativa própria do script (não um valor oficial do jogo): 75% do peso vem da qualidade e 25% do IV total, cada um normalizado entre seus extremos — IV entre 0 e 192, qualidade entre ×0.80 e o teto que aquele Pokémon realmente pode alcançar. Esse teto é ×1.8 para capturas selvagens comuns (a rolagem normal nunca passa disso) e ×4.0 para Pokémon shiny ou de breeding, os únicos que alcançam as categorias Mítica, Anciã e Divina. Uma qualidade acima de ×1.8 já entrega sozinha que o Pokémon não veio de captura normal, então o teto de ×4.0 é aplicado mesmo sem a flag de shiny. O peso maior para a qualidade segue a [pokepédia oficial de Power](https://poke.idleworld.online/pokepedia/systems/quality), que explica que a qualidade entra duas vezes na fórmula de poder do jogo (como expoente de cada stat e como multiplicador final), pesando mais que o IV. As categorias Fraca, Comum, Incomum, Rara, Épica, Lendária, Mítica, Anciã e Divina usam cores próprias. A mesma porcentagem também aparece ao lado da qualidade nos anúncios de Pokémon do Mercado Global — tanto na janela nativa do jogo quanto na versão portátil do script — sempre na cor exata que o jogo já usa para aquele tier. A exibição da porcentagem pode ser desligada em **Configurações → Script Mods → Porcentagem de potencial**.
 
 ## Pokédex
 
@@ -370,6 +370,7 @@ Abra a engrenagem do jogo e selecione a aba **Script Mods**. As opções estão 
 | Confirmação de venda | Escolhe quais itens exigem confirmação |
 | Proteção por cadeado | Evita selecionar itens bloqueados |
 | Proteção de raridade | Evita selecionar Pokémon raros em massa |
+| Porcentagem de potencial | Liga ou desliga o % estimado (75% qualidade + 25% IV) ao lado da qualidade |
 
 Por padrão, o chat fica oculto e a visualização de drops usa o ícone `?`. Todas as preferências ficam salvas somente no navegador utilizado.
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poke Idle World - Quality of Life (PIW-QOL)
 // @namespace    http://tampermonkey.net/
-// @version      9.10.14
+// @version      9.10.17
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -45,6 +45,7 @@
         if (message?.type === 'pokes') {
             latestPokemon = message.list || [];
             setTimeout(enhanceCaptureLog, 0);
+            setTimeout(enhancePartyQuality, 0);
         }
         const waiters = gameEventWaiters.get(message?.type);
         if (waiters) {
@@ -186,6 +187,7 @@
     const STORAGE_COMPARE_WINDOW = 'script_compare_window_v1';
     const STORAGE_MARK_QUICK_BUY = 'script_mark_quick_buy_v1';
     const STORAGE_MARK_QUALITY_PICKER = 'script_mark_quality_picker_v1';
+    const STORAGE_SHOW_QUALITY_POTENTIAL = 'script_show_quality_potential_v1';
     const STORAGE_CUSTOM_FONT = 'script_custom_font_v1';
     const STORAGE_CUSTOM_FONT_NAME = 'script_custom_font_name_v1';
     const CUSTOM_FONT_FAMILY = 'PIW Uploaded Font';
@@ -1414,9 +1416,19 @@
         }
         .script-capture-log-window { border-radius: 14px !important; overflow: hidden !important; }
         .script-capture-log-window .script-quality-badge {
-            display: inline !important; margin: 0 !important; padding: 0 !important;
+            display: inline-block !important; width: 122px !important; min-width: 122px !important;
+            margin: 0 !important; padding: 0 !important; white-space: nowrap !important;
             border: 0 !important; border-radius: 0 !important; background: transparent !important;
             font-size: inherit !important; font-weight: 800 !important;
+        }
+        .phud-party > button.phud-mon .script-party-quality {
+            display: inline-block !important;
+            margin-left: 5px !important;
+            font-size: 10px !important;
+            font-weight: 800 !important;
+            line-height: 1 !important;
+            vertical-align: middle !important;
+            white-space: nowrap !important;
         }
     `;
     function appendStyleWhenReady(styleElement) {
@@ -1990,7 +2002,8 @@
                         ['cfg-custom-scrollbars', STORAGE_CUSTOM_SCROLLBARS, 'Scrollbars minimalistas', 'Substitui as barras brancas pelo estilo transparente.'],
                         ['cfg-compare-window', STORAGE_COMPARE_WINDOW, 'Comparação de hunts', 'Exibe a janela móvel e redimensionável de comparação.'],
                         ['cfg-mark-quick-buy', STORAGE_MARK_QUICK_BUY, 'Compras rápidas no Mark', 'Mostra 1, 10, 100, 1.000 e 10.000 em cada produto.'],
-                        ['cfg-mark-quality-picker', STORAGE_MARK_QUALITY_PICKER, 'Seletor de qualidades do Mark', 'Agrupa as qualidades em um seletor múltiplo.']
+                        ['cfg-mark-quality-picker', STORAGE_MARK_QUALITY_PICKER, 'Seletor de qualidades do Mark', 'Agrupa as qualidades em um seletor múltiplo.'],
+                        ['cfg-show-quality-potential', STORAGE_SHOW_QUALITY_POTENTIAL, 'Porcentagem de potencial', 'Exibe uma estimativa (75% Quality + 25% IV) junto à qualidade no time, log de capturas e venda em massa. Não é um valor oficial do jogo, mas estima a força do pokémon.']
                     ].map(([className, key, title, description]) => `
                         <label class="cfg-row" style="background:#14222d;padding:10px;border-radius:6px;border:1px solid #1a2d3a;margin:0;display:flex;align-items:center;gap:9px;">
                             <input class="${className}" data-pref-key="${key}" type="checkbox" ${preferenceEnabled(key) ? 'checked' : ''}>
@@ -2173,6 +2186,9 @@
             modsContent.querySelectorAll('[data-pref-key]').forEach(control => control.addEventListener('change', event => {
                 localStorage.setItem(event.target.dataset.prefKey, String(event.target.checked));
                 applyVisualPreferences();
+                if (event.target.dataset.prefKey === STORAGE_SHOW_QUALITY_POTENTIAL) {
+                    setTimeout(enhancePartyQuality, 0);
+                }
                 if (event.target.dataset.prefKey === STORAGE_COMPARE_WINDOW) {
                     document.querySelector('.ha-script-actions')?.remove();
                     trackHuntAnalyzer();
@@ -3102,7 +3118,7 @@
                 label.style.cssText = 'min-width:0;flex:1;font-weight:700;';
                 label.textContent = kind === 'item'
                     ? `${entry.name || `Item #${entry.itemId}`} · ${Number(entry.quantity || 0).toLocaleString('pt-BR')}`
-                    : `${entry.name || entry.speciesId} · Nv ${Number(entry.level || 0)} · IV ${Number(entry.ivTotal || 0)} · Q ${Number(entry.quality || 0).toFixed(2)}${direction === 'deposit' ? ` · ${entry.team ? 'Equipe' : 'Box'}` : ''}`;
+                    : `${entry.name || entry.speciesId} · Nv ${Number(entry.level || 0)} · IV ${Number(entry.ivTotal || 0)} · ${formatPokemonQualityWithPotential(entry.quality, entry.ivTotal)}${direction === 'deposit' ? ` · ${entry.team ? 'Equipe' : 'Box'}` : ''}`;
                 const action = document.createElement('span');
                 action.style.cssText = 'color:#64c8ff;font-size:12px;font-weight:800;';
                 action.textContent = direction === 'deposit' ? 'Depositar →' : '← Retirar';
@@ -3212,7 +3228,7 @@
                 const label = document.createElement('span');
                 label.style.cssText = 'min-width:0;flex:1;font-weight:700;';
                 label.textContent = isPokemon
-                    ? `${entry.name || entry.pokeId} · Nv ${Number(entry.level || 0)} · IV ${Number(entry.ivTotal || 0)} · Q ${Number(entry.quality || 0).toFixed(2)}`
+                    ? `${entry.name || entry.pokeId} · Nv ${Number(entry.level || 0)} · IV ${Number(entry.ivTotal || 0)} · ${formatPokemonQualityWithPotential(entry.quality, entry.ivTotal)}`
                     : `${entry.name} · ${Number(entry.quantity || 0).toLocaleString('pt-BR')}`;
                 const action = document.createElement('span');
                 action.style.cssText = 'color:#64c8ff;font-size:12px;font-weight:800;';
@@ -3647,8 +3663,8 @@
                     poke.locked ? '🔒' : '',
                     (poke.market || poke.listed) ? '🏷️' : ''
                 ].filter(Boolean).join(' ');
-                const quality = Number.isFinite(Number(poke.quality)) ? Number(poke.quality).toFixed(2) : '—';
-                name.textContent = `${poke.name || `Pokémon ${poke.speciesId}`} · IV ${poke.ivTotal ?? '—'} · Qualidade ${quality} ${flags}`;
+                const quality = formatPokemonQualityWithPotential(poke.quality, poke.ivTotal, poke.shiny);
+                name.textContent = `${poke.name || `Pokémon ${poke.speciesId}`} · IV ${poke.ivTotal ?? '—'} · ${quality} ${flags}`;
 
                 const value = document.createElement('strong');
                 value.textContent = `💲${Number(poke.sellValue).toLocaleString('pt-BR')}`;
@@ -3869,7 +3885,7 @@
                 row.type = 'button';
                 row.className = `market-sell-row${selectedSellEntry === entry ? ' on' : ''}`;
                 const details = isPokemon
-                    ? `Nv ${entry.level ?? 1} · IV ${entry.ivTotal ?? 0}/192 · Q ${Number(entry.quality || 0).toFixed(2)}${entry.shiny ? ' · ✨ Shiny' : ''}`
+                    ? `Nv ${entry.level ?? 1} · IV ${entry.ivTotal ?? 0}/192 · ${formatPokemonQualityWithPotential(entry.quality, entry.ivTotal)}${entry.shiny ? ' · ✨ Shiny' : ''}`
                     : `${Number(entry.quantity || 0).toLocaleString('pt-BR')} na mochila`;
                 row.innerHTML = `${entry.icon ? `<img src="${escapeHTML(entry.icon)}" alt="">` : ''}<span><b>${escapeHTML(entry.name)}</b><small>${escapeHTML(details)}</small></span>`;
                 row.addEventListener('click', () => {
@@ -3970,9 +3986,12 @@
                     : '';
                 const row = document.createElement('div');
                 row.style.cssText = 'display:grid;grid-template-columns:minmax(190px,1fr) auto auto auto;gap:12px;align-items:center;background:#14222d;border:1px solid #1f3545;border-radius:7px;padding:9px 11px;color:#e2e8f0;';
+                const potential = quality != null && ivTotal != null
+                    ? getPokemonPotentialPercent(quality, ivTotal, entry.shiny ?? ref.shiny)
+                    : null;
                 const details = [
                     ivTotal != null ? `${tr('ivTotal')}: ${ivTotal}/192` : '',
-                    quality != null ? `Q: ${Number(quality).toFixed(2)}` : ''
+                    quality != null ? `Q: ${Number(quality).toFixed(2)}${potential !== null ? ` (${potential}%)` : ''}` : ''
                 ].filter(Boolean).join(' · ');
                 const offerOnly = Boolean(entry.offerOnly || price <= 0);
                 const currency = normalizeMarketCurrency(entry.currency || entry.currencyType || ref.currency || ref.currencyType);
@@ -5140,6 +5159,133 @@
         return new Intl.NumberFormat('pt-BR').format(num);
     }
 
+    // A qualidade é o multiplicador numérico oficial retornado pelo jogo.
+    // As faixas e cores seguem a apresentação do JustPokédex para que o valor
+    // seja legível sem perder a precisão do multiplicador.
+    function getPokemonQualityInfo(multiplier) {
+        const value = Number(multiplier);
+        if (!Number.isFinite(value)) return null;
+        if (value < 1.0) return { label: 'Fraca', color: '#9e9e9e' };
+        if (value < 1.1) return { label: 'Comum', color: '#a8a8a8' };
+        if (value < 1.3) return { label: 'Incomum', color: '#5ed7b9' };
+        if (value < 1.5) return { label: 'Rara', color: '#69b7ff' };
+        if (value < 1.7) return { label: 'Épica', color: '#d985ff' };
+        if (value < 2.0) return { label: 'Lendária', color: '#f1c644' };
+        if (value < 3.0) return { label: 'Mítica', color: '#ff6680' };
+        if (value < 4.0) return { label: 'Anciã', color: '#ff9800' };
+        return { label: 'Divina', color: '#00bcd4' };
+    }
+
+    function formatPokemonQuality(multiplier) {
+        const info = getPokemonQualityInfo(multiplier);
+        const value = Number(multiplier);
+        return info ? `${info.label} ×${value.toFixed(2)}` : null;
+    }
+
+    function formatPokemonQualityWithPotential(multiplier, ivTotal, isShiny = false) {
+        const quality = formatPokemonQuality(multiplier);
+        const potential = getPokemonPotentialPercent(multiplier, ivTotal, isShiny);
+        if (!quality) return 'Qualidade —';
+        const info = getPokemonQualityInfo(multiplier);
+        return `${info.label}${potential === null ? '' : ` ${potential}%`} ×${Number(multiplier).toFixed(2)}`;
+    }
+
+    function getCaptureIvTotal(capture, row) {
+        const directValues = [capture?.ivTotal, capture?.totalIv, capture?.iv, capture?.growth];
+        for (const candidate of directValues) {
+            if (Number.isFinite(Number(candidate))) return Number(candidate);
+            if (candidate && typeof candidate === 'object') {
+                const total = Object.values(candidate).reduce((sum, value) => sum + (Number(value) || 0), 0);
+                if (total > 0) return total;
+            }
+        }
+
+        const ivText = row?.textContent?.match(/\bIV\s*:?\s*(\d+(?:[.,]\d+)?)\s*(?:\/\s*192)?/i)?.[1];
+        return ivText ? Number(ivText.replace(',', '.')) : null;
+    }
+
+    // Capturas selvagens normais têm teto ×1.8 (rolagem nunca passa disso); só
+    // shiny e Pokémon de breeding alcançam Mítica/Anciã/Divina (×2.0 a ×4.0).
+    // Uma qualidade acima de 1.8 já prova por si só que não veio de captura normal.
+    const WILD_QUALITY_CEILING = 1.8;
+    const SPECIAL_QUALITY_CEILING = 4.0;
+    function getPokemonQualityCeiling(multiplier, isShiny) {
+        const quality = Number(multiplier);
+        return (isShiny || quality > WILD_QUALITY_CEILING) ? SPECIAL_QUALITY_CEILING : WILD_QUALITY_CEILING;
+    }
+
+    // Índice de potencial: Quality pesa mais que IV (75/25), já que segundo a
+    // pokepédia oficial (/pokepedia/systems/power) Quality entra duas vezes na
+    // fórmula real de power (expoente por stat + multiplicador final), enquanto
+    // o IV só soma linearmente dentro de cada stat e é dominado pelo base stat.
+    // 0% = 0 IV e ×0.80; 100% = 192 IV e no teto de qualidade do Pokémon
+    // (×1.8 para captura selvagem normal, ×4.0 para shiny/breeding).
+    const POTENTIAL_QUALITY_WEIGHT = 0.75;
+    function getPokemonPotentialPercent(multiplier, ivTotal, isShiny = false) {
+        if (!preferenceEnabled(STORAGE_SHOW_QUALITY_POTENTIAL)) return null;
+        const quality = Number(multiplier);
+        const iv = Number(ivTotal);
+        if (!Number.isFinite(quality) || !Number.isFinite(iv)) return null;
+        const qualityCeiling = getPokemonQualityCeiling(quality, isShiny);
+        const normalizedQuality = (Math.min(qualityCeiling, Math.max(0.8, quality)) - 0.8) / (qualityCeiling - 0.8);
+        const normalizedIv = Math.min(192, Math.max(0, iv)) / 192;
+        const weighted = normalizedQuality * POTENTIAL_QUALITY_WEIGHT + normalizedIv * (1 - POTENTIAL_QUALITY_WEIGHT);
+        return Math.min(100, Math.max(0, Math.round(weighted * 100)));
+    }
+
+    function getPokemonQualityTitle(multiplier, ivTotal, isShiny = false) {
+        const value = Number(multiplier);
+        const formatted = formatPokemonQuality(value);
+        const potential = getPokemonPotentialPercent(value, ivTotal, isShiny);
+        if (!formatted) return '';
+        const qualityCeiling = getPokemonQualityCeiling(value, isShiny);
+        return potential === null
+            ? `Qualidade: ${formatted}`
+            : `Potencial: ${potential}% (IV ${Number(ivTotal).toFixed(1)}/192 e qualidade ${Number(multiplier).toFixed(2)}×; máximo: 192 IV e ×${qualityCeiling.toFixed(1)})`;
+    }
+
+    function normalizePartyPokemonName(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\bshiny\b/gi, '')
+            .replace(/[^a-z0-9]/gi, '')
+            .toLowerCase();
+    }
+
+    function enhancePartyQuality(pokemonList = latestPokemon) {
+        const buttons = Array.from(document.querySelectorAll('div.phud-party > button.phud-mon'));
+        if (!buttons.length) return;
+
+        const teamPokemon = Array.isArray(pokemonList)
+            ? pokemonList.filter(pokemon => pokemon?.team).sort((a, b) => Number(a.slot ?? 99) - Number(b.slot ?? 99))
+            : [];
+
+        if (!teamPokemon.length) return;
+
+        buttons.forEach((button, index) => {
+            const nameElement = button.querySelector('.phud-mon-name, .phud-name, [class*="name"]') || button;
+            const visibleName = normalizePartyPokemonName(nameElement.textContent);
+            const pokemon = teamPokemon.find(entry => normalizePartyPokemonName(entry.name) === visibleName) || teamPokemon[index];
+            const oldBadge = button.querySelector('.script-party-quality');
+            const ivTotal = getCaptureIvTotal(pokemon, null);
+            const qualityInfo = getPokemonQualityInfo(pokemon?.quality);
+            const potential = getPokemonPotentialPercent(pokemon?.quality, ivTotal, pokemon?.shiny);
+
+            if (!pokemon || !qualityInfo || potential === null) {
+                oldBadge?.remove();
+                return;
+            }
+
+            const badge = oldBadge || document.createElement('span');
+            badge.className = 'script-party-quality';
+            badge.textContent = `${potential}%`;
+            badge.style.color = qualityInfo.color;
+            badge.title = getPokemonQualityTitle(pokemon.quality, ivTotal, pokemon?.shiny);
+            if (!oldBadge) nameElement.appendChild(badge);
+        });
+    }
+
     let huntAnalyzerRenderRefreshPending = false;
     function refreshHuntAnalyzerGameRender() {
         if (huntAnalyzerRenderRefreshPending || document.hidden) return;
@@ -5512,18 +5658,69 @@
                 Array.from(captureWindow.querySelectorAll('.clog-row')).forEach((row, index) => {
                     const capture = captures[index];
                     const level = row.querySelector('.clog-lvl');
-                    const rarity = row.querySelector('.clog-meta b');
                     const quality = Number(capture?.quality);
-                    if (!level || !Number.isFinite(quality)) return;
-                    level.textContent = String(quality);
-                    if (rarity) level.style.color = getComputedStyle(rarity).color;
+                    const qualityInfo = getPokemonQualityInfo(quality);
+                    if (!level || !qualityInfo) return;
+                    const ivTotal = getCaptureIvTotal(capture, row);
+                    const isShiny = capture?.shiny ?? (filter === 'shiny');
+                    level.textContent = formatPokemonQualityWithPotential(quality, ivTotal, isShiny);
+                    level.style.color = qualityInfo.color;
+                    level.title = getPokemonQualityTitle(quality, ivTotal, isShiny);
                     level.classList.add('script-quality-badge');
+                    const rarity = row.querySelector('.clog-meta b');
+                    if (rarity) rarity.style.display = 'none';
                     row.dataset.scriptQualityLoaded = 'true';
                 });
             })
             .catch(error => console.error('Falha ao carregar a qualidade do Log de Capturas:', error))
             .finally(() => { captureLogEnhancementPromise = null; });
         return captureLogEnhancementPromise;
+    }
+
+    // Janela nativa "Mercado Global" do jogo (diferente da versão portátil que
+    // este script cria): cada linha é .mkt2-trow.clickable, e a célula
+    // .mkt2-tc--meta guarda nível, IV e um span com "color:" inline contendo
+    // "<Tier> ×<qualidade>". Recalcula a cada tick em vez de marcar linhas
+    // como "já processadas", pois o jogo pode reciclar essas linhas ao trocar
+    // de página/ordenação.
+    function enhanceNativeGlobalMarketQuality() {
+        const metaCells = document.querySelectorAll('.mkt2-trow.clickable .mkt2-tc--meta');
+        if (!metaCells.length) return;
+        if (!preferenceEnabled(STORAGE_SHOW_QUALITY_POTENTIAL)) {
+            metaCells.forEach(meta => meta.querySelector('.script-gm-potential')?.remove());
+            return;
+        }
+        metaCells.forEach(meta => {
+            const qualitySpan = meta.querySelector('span[style*="color"]');
+            const oldBadge = qualitySpan?.querySelector('.script-gm-potential');
+            // Lê só os nós de texto originais do jogo — ignora nossa própria badge,
+            // que senão entraria no textContent e quebraria o regex (terminaria em
+            // ")" em vez de dígito), causando remove→recria em loop a cada tick.
+            const rawQualityText = qualitySpan
+                ? Array.from(qualitySpan.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('')
+                : '';
+            const qualityMatch = rawQualityText.match(/(\d+(?:[.,]\d+)?)\s*$/);
+            const ivMatch = meta.textContent.match(/IV\s*(\d+)/i);
+            if (!qualitySpan || !qualityMatch || !ivMatch) { oldBadge?.remove(); return; }
+            const quality = Number(qualityMatch[1].replace(',', '.'));
+            const ivTotal = Number(ivMatch[1]);
+            const nameText = meta.closest('.mkt2-trow')?.querySelector('.mkt2-tc--name')?.textContent || '';
+            const isShiny = /^\s*shiny\b/i.test(nameText);
+            const potential = getPokemonPotentialPercent(quality, ivTotal, isShiny);
+            if (potential === null) { oldBadge?.remove(); return; }
+            const badgeText = ` (${potential}%)`;
+            if (oldBadge) {
+                if (oldBadge.textContent !== badgeText) oldBadge.textContent = badgeText;
+                return;
+            }
+            // Usa a cor exata que o próprio jogo aplicou ao tier (qualitySpan.style.color)
+            // em vez do nosso mapeamento interno — assim a badge sempre bate com a cor real.
+            const badge = document.createElement('span');
+            badge.className = 'script-gm-potential';
+            badge.style.cssText = `font-weight:800;color:${qualitySpan.style.color};`;
+            badge.textContent = badgeText;
+            qualitySpan.appendChild(badge);
+        });
     }
 
     let domCheckTimeout = null;
@@ -5542,6 +5739,7 @@
             if (document.querySelector('.ha-window:not(.ha-compare-modal)')) trackHuntAnalyzer();
             if (document.querySelector('.inv-window')) enhanceInventoryWindow();
             enhanceCaptureLog();
+            enhanceNativeGlobalMarketQuality();
 
             const mapWindow = document.querySelector('.map-window');
             if (mapWindow) {
