@@ -1416,10 +1416,9 @@
         }
         .script-capture-log-window { border-radius: 14px !important; overflow: hidden !important; }
         .script-capture-log-window .script-quality-badge {
-            display: inline-block !important; width: 122px !important; min-width: 122px !important;
-            margin: 0 !important; padding: 0 !important; white-space: nowrap !important;
-            border: 0 !important; border-radius: 0 !important; background: transparent !important;
-            font-size: inherit !important; font-weight: 800 !important;
+            display: inline-block !important; margin: 0 !important; padding: 0 !important;
+            white-space: nowrap !important; border: 0 !important; border-radius: 0 !important;
+            background: transparent !important; font-size: inherit !important; font-weight: 800 !important;
         }
         .phud-party > button.phud-mon .script-party-quality {
             display: inline-block !important;
@@ -5663,12 +5662,15 @@
                     if (!level || !qualityInfo) return;
                     const ivTotal = getCaptureIvTotal(capture, row);
                     const isShiny = capture?.shiny ?? (filter === 'shiny');
-                    level.textContent = formatPokemonQualityWithPotential(quality, ivTotal, isShiny);
+                    const potential = getPokemonPotentialPercent(quality, ivTotal, isShiny);
+                    const ivText = Number.isFinite(ivTotal) ? ` IV ${ivTotal}/192` : '';
+                    const potentialText = potential !== null ? ` (${potential}%)` : '';
+                    level.textContent = `${formatPokemonQuality(quality)}${ivText}${potentialText}`;
                     level.style.color = qualityInfo.color;
                     level.title = getPokemonQualityTitle(quality, ivTotal, isShiny);
                     level.classList.add('script-quality-badge');
-                    const rarity = row.querySelector('.clog-meta b');
-                    if (rarity) rarity.style.display = 'none';
+                    const meta = row.querySelector('.clog-meta');
+                    if (meta?.innerText?.length) meta.innerHTML = '';
                     row.dataset.scriptQualityLoaded = 'true';
                 });
             })
