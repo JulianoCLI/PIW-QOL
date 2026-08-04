@@ -19,7 +19,7 @@ O script melhora a tela do jogo e reúne funções que normalmente exigiriam vá
 - melhorar a Pokédex e o Hunt Analyzer;
 - escolher quais modificações deseja usar.
 
-A versão 9.10.14 também uniformiza fontes e barras de rolagem, permite importar fontes personalizadas e melhora a comparação de hunts. O auto-reconnect opcional agora leva o personagem a Cerulean, aguarda 10 segundos e retorna à hunt anterior quando ela fica sem atividade.
+A versão 9.10.14 também uniformiza fontes e barras de rolagem, permite importar fontes personalizadas e melhora a comparação de hunts. O auto-reconnect vem desativado por padrão; depois de habilitado uma vez, permanece ativo e leva o personagem a Cerulean por 10 segundos antes de retornar à hunt que perdeu atividade.
 
 Você não precisa saber programar. Depois de instalado, o script funciona dentro do próprio jogo.
 

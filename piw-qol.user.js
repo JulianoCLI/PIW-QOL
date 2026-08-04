@@ -26,6 +26,7 @@
     let lastHuntSocketActivityAt = Date.now();
     let lastAutoReconnectAt = 0;
     let autoReconnectInProgress = false;
+    let lastCaptureBarSignature = '';
 
     function handleGameSocketMessage(event) {
         let message;
@@ -36,8 +37,7 @@
         }
         lastSocketMessageAt = Date.now();
         const messageType = String(message?.type || '');
-        if (/hunt|encounter|spawn|wild|battle|combat|capture|catch|attack|damage|exp|loot|drop|pokes/i.test(messageType)
-            || (document.querySelector('[data-guide="capture-bar"]') && !/chat|family|friend|ranking|pong|ping/i.test(messageType))) {
+        if (/hunt|encounter|spawn|wild|battle|combat|capture|catch|attack|damage|exp|loot|drop/i.test(messageType)) {
             lastHuntSocketActivityAt = Date.now();
         }
         if (message?.type === 'inventory') latestInventory = message.items || [];
@@ -95,10 +95,17 @@
     }
 
     setInterval(async () => {
-        if (!isAutoReconnectActive() || autoReconnectInProgress || !document.querySelector('[data-guide="capture-bar"]')) return;
+        const captureBar = document.querySelector('[data-guide="capture-bar"]');
+        if (!isAutoReconnectActive() || autoReconnectInProgress || !captureBar) return;
         const now = Date.now();
+        const connectionLost = !gameSocket || gameSocket.readyState !== NativeWebSocket.OPEN;
+        const captureBarSignature = captureBar.innerHTML;
+        if (!connectionLost && captureBarSignature !== lastCaptureBarSignature) {
+            lastCaptureBarSignature = captureBarSignature;
+            lastHuntSocketActivityAt = now;
+        }
         const staleFor = now - lastHuntSocketActivityAt;
-        if (!gameSocket || gameSocket.readyState !== NativeWebSocket.OPEN || staleFor < 75000 || now - lastAutoReconnectAt < 90000) return;
+        if ((!connectionLost && staleFor < 75000) || now - lastAutoReconnectAt < 90000) return;
         lastAutoReconnectAt = now;
         autoReconnectInProgress = true;
         try {
@@ -244,7 +251,7 @@
         const custom = getCustomFont().replace(/[;{}]/g, '').trim();
         document.documentElement.style.setProperty('--piw-game-font', key === 'custom' && custom ? custom : GAME_FONT_OPTIONS[key === 'custom' ? 'barlow' : key]);
     }
-    function isAutoReconnectActive() { return localStorage.getItem(STORAGE_AUTO_RECONNECT) !== 'false'; }
+    function isAutoReconnectActive() { return localStorage.getItem(STORAGE_AUTO_RECONNECT) === 'true'; }
     const preferenceEnabled = key => localStorage.getItem(key) !== 'false';
     function applyVisualPreferences() {
         document.documentElement.classList.toggle('script-custom-scrollbars', preferenceEnabled(STORAGE_CUSTOM_SCROLLBARS));
@@ -2169,7 +2176,13 @@
                 }
             });
             modsContent.querySelector('.cfg-auto-reconnect').checked = isAutoReconnectActive();
-            modsContent.querySelector('.cfg-auto-reconnect').addEventListener('change', event => localStorage.setItem(STORAGE_AUTO_RECONNECT, String(event.target.checked)));
+            modsContent.querySelector('.cfg-auto-reconnect').addEventListener('change', event => {
+                localStorage.setItem(STORAGE_AUTO_RECONNECT, String(event.target.checked));
+                if (event.target.checked) {
+                    lastHuntSocketActivityAt = Date.now();
+                    lastCaptureBarSignature = document.querySelector('[data-guide="capture-bar"]')?.innerHTML || '';
+                }
+            });
             modsContent.querySelectorAll('[data-pref-key]').forEach(control => control.addEventListener('change', event => {
                 localStorage.setItem(event.target.dataset.prefKey, String(event.target.checked));
                 applyVisualPreferences();
