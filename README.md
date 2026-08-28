@@ -2,7 +2,7 @@
 
 Um script gratuito que adiciona atalhos, informações e melhorias visuais ao [Pokémon Idle World](https://poke.idleworld.online/play).
 
-[![Versão](https://img.shields.io/badge/versão-10.1.0-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
+[![Versão](https://img.shields.io/badge/versão-10.1.1-blue?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Instalar](https://img.shields.io/badge/instalar-script-brightgreen?style=for-the-badge)](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js)
 [![Licença](https://img.shields.io/badge/licença-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -19,7 +19,7 @@ O script melhora a tela do jogo e reúne funções que normalmente exigiriam vá
 - melhorar a Pokédex e o Hunt Analyzer;
 - escolher quais modificações deseja usar.
 
-A versão 10.1.0 conserta o auto-reconnect, que às vezes deixava o personagem parado fora da hunt, e reorganiza a janela **Script Mods** em categorias. A porcentagem de potencial passou a vir desativada por padrão, e a opção "Proteção por cadeado" foi removida porque o próprio jogo já cuida disso.
+A versão 10.1.1 mantém o auto-reconnect corrigido, adiciona imagens dos Pokémon na lista de venda e mantém a busca de hunts compatível com as novas abas visuais de áreas do mapa. A porcentagem de potencial passou a vir desativada por padrão, e a opção "Proteção por cadeado" foi removida porque o próprio jogo já cuida disso. Ela também reduz o consumo de CPU do script durante as hunts, corrigindo duas rotinas que ficavam trabalhando sem parar em segundo plano.
 
 Você não precisa saber programar. Depois de instalado, o script funciona dentro do próprio jogo.
 
@@ -244,6 +244,7 @@ Você pode alterar essa lista em **Configurações → Script Mods → Itens com
 
 Clique em **Pokémon** na janela de venda para trocar de tela. A lista mostra informações úteis do Pokémon, incluindo:
 
+- imagem do Pokémon, ativada por padrão e desativável em **Configurações → Script Mods → Pokémon**;
 - IV total;
 - qualidade;
 - preço de venda;
@@ -308,7 +309,7 @@ O modo compacto e a exibição de drops são lembrados pelo navegador.
 
 O painel reduzido pode ser redimensionado pelo canto. Quando os drops estão visíveis, a lista aproveita a altura disponível conforme a janela é expandida.
 
-O Analyzer também funciona no modo de batalha **Cartas**. Ao retornar para a aba do jogo, o mod resincroniza a visibilidade da renderização para evitar que a tela permaneça no estado escuro de economia de recursos.
+O Analyzer também funciona no modo de batalha **Cartas**. Ao retornar para a aba do jogo, o mod resincroniza a visibilidade da renderização para evitar que a tela permaneça no estado escuro de economia de recursos. Essa resincronização acontece ao voltar para a aba e, fora isso, no máximo uma vez a cada quatro segundos.
 
 O comparador mantém o botão de fechar separado das demais ações. A opção de limpar o histórico fica junto do histórico recente, evitando sobreposição em janelas menores.
 
@@ -400,7 +401,7 @@ Abra a engrenagem do jogo e selecione a aba **Script Mods**. As opções ficam s
 | 🔤 Fontes | Fonte do jogo | Escolhe a família tipográfica, inclusive um arquivo próprio |
 | 🔤 Fontes | Fonte unificada | Aplica a fonte escolhida às janelas e controles do jogo |
 
-Por padrão, o chat fica oculto, a visualização de drops usa o ícone `?` e a porcentagem de potencial fica desligada. Todas as preferências ficam salvas somente no navegador utilizado.
+Por padrão, o chat fica oculto, a visualização de drops usa o ícone `?`, a imagem do Pokémon fica ativada na tela de venda e a porcentagem de potencial fica desligada. Todas as preferências ficam salvas somente no navegador utilizado.
 
 A opção "Proteção por cadeado" saiu na versão 10.1.0: o próprio jogo passou a oferecer cadeados nativos, e o script agora usa esse recurso em vez de manter uma lista paralela.
 
@@ -426,7 +427,7 @@ Para atualizar manualmente:
 
 Você também pode abrir novamente o [link de instalação](https://github.com/JulianoCLI/PIW-QOL/raw/main/piw-qol.user.js). Se já estiver instalado, a extensão oferecerá a atualização.
 
-Confira a versão no começo do script. A versão documentada neste README é a **10.1.0**.
+Confira a versão no começo do script. A versão documentada neste README é a **10.1.1**.
 
 ## Solução de problemas
 
