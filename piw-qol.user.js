@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Poke Idle World - Quality of Life (PIW-QOL)
 // @namespace    http://tampermonkey.net/
-// @version      10.1.0
+// @version      10.1.1
 // @description  Suporte a ícones oficiais via items.json, lógica de valores robusta e tooltips esteticamente alinhadas ao jogo.
 // @author       Desjunior (JulianoCLI)
 // @match        https://poke.idleworld.online/play
@@ -420,6 +420,7 @@
     const STORAGE_MARK_QUICK_BUY = 'script_mark_quick_buy_v1';
     const STORAGE_MARK_QUALITY_PICKER = 'script_mark_quality_picker_v1';
     const STORAGE_SHOW_QUALITY_POTENTIAL = 'script_show_quality_potential_v1';
+    const STORAGE_SHOW_POKEMON_SELL_ICON = 'script_show_pokemon_sell_icon_v1';
     const STORAGE_CUSTOM_FONT = 'script_custom_font_v1';
     const STORAGE_CUSTOM_FONT_NAME = 'script_custom_font_name_v1';
     const CUSTOM_FONT_FAMILY = 'PIW Uploaded Font';
@@ -861,6 +862,11 @@
         return POKEMON_ITEM_ICONS[id] ? `/assets/pokeitems/${POKEMON_ITEM_ICONS[id]}.png` : '';
     }
 
+    function getPokemonIconUrlByName(name) {
+        const pokemon = globalCreatureApiData.get(getCleanHuntName(name));
+        return getPokemonIconUrl(pokemon?.speciesId ?? pokemon?.pokeId ?? pokemon?.id);
+    }
+
     function updateCachedLeaderPokemon(pokemonList) {
         const leader = pokemonList.find(pokemon => pokemon.leader)
             || pokemonList.filter(pokemon => pokemon.team).sort((a, b) => Number(a.slot ?? 99) - Number(b.slot ?? 99))[0];
@@ -885,6 +891,64 @@
         if (!icon) return '';
         if (/^(https?:)?\//.test(icon)) return icon;
         return `/assets/items/${String(icon).replace(/^\/+/, '')}`;
+    }
+
+    // Caminhos ja confirmados no jogo: evita a cascata de 404 do fallback abaixo.
+    const KNOWN_STONE_ICON_URLS = {
+        fire_stone: '/assets/items/fire_stone.gif',
+        feather_stone: '/assets/stones/feather_stone.png',
+        leaf_stone: '/assets/items/leaf_stone.gif',
+        rock_stone: '/assets/items/rock_stone.gif',
+        enigma_stone: '/assets/items/enigma_stone.gif',
+        cocoon_stone: '/assets/items/cocoon_stone.gif',
+        thunder_stone: '/assets/items/thunder_stone.gif',
+        earth_stone: '/assets/items/earth_stone.gif',
+        crystal_stone: '/assets/items/crystal_stone.gif',
+        metal_stone: '/assets/stones/metal_stone.png',
+        ancient_stone: '/assets/stones/ancient_stone.gif',
+        water_stone: '/assets/items/water_stone.gif',
+        heart_stone: '/assets/items/heart_stone.gif',
+        skull_stone: '/assets/items/skull_stone.png',
+        ice_stone: '/assets/items/ice_stone.gif',
+        punch_stone: '/assets/items/punch_stone.gif',
+        darkness_stone: '/assets/items/darkness_stone.gif',
+        venom_stone: '/assets/items/venom_stone.gif',
+        deep_stone: '/assets/items/deep_stone.png',
+        flower_stone: '/assets/items/flower_stone.png',
+        aqua_stone: '/assets/items/aqua_stone.png',
+        champion_stone: '/assets/items/champion_stone.png',
+        voltage_stone: '/assets/items/voltage_stone.png',
+        pixie_stone: '/assets/items/pixie_stone.png',
+        tortoise_stone: '/assets/items/tortoise_stone.png',
+        aroma_stone: '/assets/items/aroma_stone.png'
+    };
+
+    function getMarketItemIconHTML(name, entry, ref, category) {
+        const cleanName = String(name || '').trim().toLowerCase();
+        if (cleanName === 'diamonds' || String(category || '').toLowerCase() === 'diamonds') {
+            return '<span class="market-item-emoji" aria-hidden="true">💎</span>';
+        }
+        if (/\bstone\b/.test(cleanName) || /stones?/i.test(category)) {
+            const stoneKey = cleanName.replace(/\s+/g, '_');
+            const stoneSlug = encodeURIComponent(stoneKey);
+            // Alguns devs largaram stones fora de /assets/stones/, entao tentamos os dois diretorios e as duas extensoes.
+            const [firstSource, ...fallbackSources] = [...new Set([
+                KNOWN_STONE_ICON_URLS[stoneKey],
+                `/assets/stones/${stoneSlug}.png`,
+                `/assets/stones/${stoneSlug}.gif`,
+                `/assets/items/${stoneSlug}.gif`,
+                `/assets/items/${stoneSlug}.png`
+            ].filter(Boolean))];
+            return `<img class="market-item-icon" src="${firstSource}" data-icon-fallbacks="${escapeHTML(JSON.stringify(fallbackSources))}" alt="">`;
+        }
+        if (cleanName === 'idle ball') {
+            return '<img class="market-item-icon" src="/assets/markitems/idleball.png" alt="">';
+        }
+        const item = globalItemApiData.get(cleanName);
+        const iconSource = entry?.icon || ref?.icon || item?.icon || item?.image || item?.sprite || item?.img || '';
+        return iconSource
+            ? `<img class="market-item-icon" src="${escapeHTML(normalizeGameItemIcon(iconSource))}" alt="">`
+            : '<span class="market-item-emoji" aria-hidden="true">🌿</span>';
     }
 
     function getMarkerName(marker) {
@@ -1419,7 +1483,7 @@
         .map-window .script-hidden-native-types {
             display: none !important;
         }
-        .map-window .map-area {
+        .map-window .map-area, .map-window .map-plate {
             border-radius: 9px !important;
             overflow: hidden !important;
         }
@@ -1530,6 +1594,8 @@
         .hunt-sell-row[hidden] { display: none !important; }
         .hunt-sell-row input[type="number"] { width: 100%; box-sizing: border-box; background: #0c161f; color: #e2e8f0; border: 1px solid #273f52; border-radius: 4px; padding: 5px; }
         .hunt-sell-row.protected { opacity: 0.45; }
+        .hunt-pokemon-sell-icon { width: 28px; height: 28px; object-fit: contain; image-rendering: pixelated; }
+        .hunt-item-sell-icon { width: 28px; height: 28px; object-fit: contain; flex: none; }
 
         .sell-confirm-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 10150; display: flex; align-items: center; justify-content: center; }
         .sell-confirm-modal { background: #0c161f; border: 1px solid #273f52; border-radius: 8px; padding: 0; color: #e2e8f0; width: 320px; box-shadow: 0 12px 32px rgba(0,0,0,0.8); overflow: hidden; }
@@ -1614,7 +1680,11 @@
         .market-sell-row { width:100%;display:grid;grid-template-columns:42px 1fr;gap:10px;align-items:center;text-align:left;background:#14222d;color:#e2e8f0;border:1px solid #1f3545;border-radius:7px;padding:8px 10px; }
         .market-sell-row:hover,.market-sell-row.on { border-color:#c8a24e;background:#1b2c39; }
         .market-sell-row img { width:38px;height:38px;object-fit:contain; }
+        .market-list .market-pokemon-icon { width:38px;height:38px;object-fit:contain;image-rendering:pixelated;flex:none; }
+        .market-list .market-item-icon { width:38px;height:38px;object-fit:contain;flex:none; }
+        .market-list .market-item-emoji { width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:24px; }
         .market-sell-row small { display:block;color:#9fb0bd;margin-top:3px; }
+        .mk-row .script-mark-product-icon { width:34px;height:34px;object-fit:contain;flex:none; }
         .script-quality-multiselect { position:relative;display:inline-block;z-index:8; }
         .script-quality-toggle { min-width:170px;text-align:left; }
         .script-quality-dropdown { position:absolute;min-width:190px;padding:7px;background:#101b24;border:1px solid #7a5a27;border-radius:6px;box-shadow:0 8px 22px #000b;display:grid;gap:3px;z-index:100000;pointer-events:auto; }
@@ -2132,6 +2202,25 @@
         return true;
     }
 
+    function getMapAreaTabs(mapWindow) {
+        return Array.from(mapWindow.querySelectorAll('.map-area:not(.locked), .map-plate:not(.locked)'));
+    }
+
+    function waitForMapAreaChange(previousTab) {
+        return new Promise(resolve => {
+            const deadline = Date.now() + 1200;
+            const check = () => {
+                const activeTab = document.querySelector('.map-area.on, .map-plate.on');
+                if (activeTab && activeTab !== previousTab || Date.now() >= deadline) {
+                    resolve(activeTab);
+                    return;
+                }
+                requestAnimationFrame(check);
+            };
+            check();
+        });
+    }
+
     // Devolve true somente quando um marcador da hunt foi realmente clicado. O
     // auto-reconnect depende dessa distinção para saber se precisa tentar de novo;
     // `silent` evita encher a tela de avisos durante as retentativas automáticas.
@@ -2165,24 +2254,26 @@
 
         // Compatibilidade com versões do jogo nas quais o marcador da área ainda
         // não foi montado no DOM.
-        let allTabs = Array.from(mapWindow.querySelectorAll('.map-area:not(.locked)'));
+        let allTabs = getMapAreaTabs(mapWindow);
         if (allTabs.length === 0) {
             const found = await tryFindMarkerAsync(huntName, 20, 100);
             if (!found) notify(`Hunt "${huntName}" não foi localizada.`, { isError: true });
             return found;
         }
 
-        const activeTab = mapWindow.querySelector('.map-area.on');
+        const activeTab = mapWindow.querySelector('.map-area.on, .map-plate.on');
         if (activeTab) {
             const found = await tryFindMarkerAsync(huntName, 10, 100);
             if (found) return true;
         }
 
-        for (const tab of allTabs) {
-            if (tab === activeTab) continue;
+        for (let tabIndex = 0; tabIndex < allTabs.length; tabIndex += 1) {
+            const tab = getMapAreaTabs(mapWindow)[tabIndex];
+            if (!tab || tab === activeTab) continue;
 
             tab.click();
-            const found = await tryFindMarkerAsync(huntName, 20, 100);
+            await waitForMapAreaChange(activeTab);
+            const found = await tryFindMarkerAsync(huntName, 40, 100);
             if (found) return true;
         }
 
@@ -2502,7 +2593,9 @@
 
                     ${category('🐾', 'Pokémon', [
                         prefToggle('cfg-show-quality-potential', STORAGE_SHOW_QUALITY_POTENTIAL, 'Porcentagem de potencial',
-                            'Exibe uma estimativa (75% qualidade + 25% IV) junto à qualidade no time, log de capturas e venda em massa. Não é um valor oficial do jogo, mas estima a força do Pokémon.')
+                            'Exibe uma estimativa (75% qualidade + 25% IV) junto à qualidade no time, log de capturas e venda em massa. Não é um valor oficial do jogo, mas estima a força do Pokémon.'),
+                        prefToggle('cfg-show-pokemon-sell-icon', STORAGE_SHOW_POKEMON_SELL_ICON, 'Imagem na venda de Pokémon',
+                            'Exibe a imagem da Pokédex antes do nome na tela de venda da hunt.')
                     ])}
 
                     ${category('🛡️', 'Proteções e vendas', [
@@ -2852,7 +2945,7 @@
                     lastMapRenderSignature = '';
                     buildSimpleList();
                 });
-                const nativeAreas = mapWindow.querySelectorAll('.map-area');
+                const nativeAreas = mapWindow.querySelectorAll('.map-area, .map-plate');
                 const nativeAreaParent = nativeAreas[0]?.parentElement;
                 (nativeAreaParent || mapBody).appendChild(viewTabs);
                 nativeAreas.forEach(area => area.addEventListener('click', () => {
@@ -3202,6 +3295,16 @@
                     const sprite = document.createElement('div');
                     sprite.style = hunt.iconStyle;
                     spriteContainer.appendChild(sprite);
+                } else {
+                    const spriteUrl = getPokemonIconUrlByName(hunt.name);
+                    if (spriteUrl) {
+                        const sprite = document.createElement('img');
+                        sprite.src = spriteUrl;
+                        sprite.alt = hunt.displayName;
+                        sprite.style = 'width:38px;height:38px;object-fit:contain;image-rendering:pixelated;';
+                        sprite.onerror = () => sprite.remove();
+                        spriteContainer.appendChild(sprite);
+                    }
                 }
 
                 let bottomInfoHTML = '';
@@ -3679,6 +3782,10 @@
                 label.textContent = kind === 'item'
                     ? `${entry.name || `Item #${entry.itemId}`} · ${Number(entry.quantity || 0).toLocaleString('pt-BR')}`
                     : `${entry.name || entry.speciesId} · Nv ${Number(entry.level || 0)} · IV ${Number(entry.ivTotal || 0)} · ${formatPokemonQualityWithPotential(entry.quality, entry.ivTotal)}${direction === 'deposit' ? ` · ${entry.team ? 'Equipe' : 'Box'}` : ''}`;
+                if (kind === 'pokemon') {
+                    const rarity = getPokemonQualityInfo(entry.quality);
+                    if (rarity) label.style.color = rarity.color;
+                }
                 const action = document.createElement('span');
                 action.style.cssText = 'color:#64c8ff;font-size:12px;font-weight:800;';
                 action.textContent = direction === 'deposit' ? 'Depositar →' : '← Retirar';
@@ -3824,6 +3931,10 @@
                 label.textContent = isPokemon
                     ? `${entry.name || entry.pokeId} · Nv ${Number(entry.level || 0)} · IV ${Number(entry.ivTotal || 0)} · ${formatPokemonQualityWithPotential(entry.quality, entry.ivTotal)}`
                     : `${entry.name} · ${Number(entry.quantity || 0).toLocaleString('pt-BR')}`;
+                if (isPokemon) {
+                    const rarity = getPokemonQualityInfo(entry.quality);
+                    if (rarity) label.style.color = rarity.color;
+                }
                 const action = document.createElement('span');
                 action.style.cssText = 'color:#64c8ff;font-size:12px;font-weight:800;';
                 action.textContent = direction === 'store' ? 'Guardar →' : '← Retirar';
@@ -4003,7 +4114,7 @@
         const backdrop = document.createElement('div');
         backdrop.className = 'sell-confirm-backdrop hunt-sell-backdrop';
         backdrop.innerHTML = `
-            <div class="sell-confirm-modal" style="width:460px; max-width:94vw;">
+            <div class="sell-confirm-modal" style="width:600px; max-width:94vw;">
                 <div class="sell-confirm-title">
                     <span>🛒 Vender itens</span>
                     <button class="hunt-pokemon-open mk-bulk-btn" type="button" style="margin-left:auto;">🐾 Pokémon</button>
@@ -4052,6 +4163,7 @@
                                 qty: Number(entry.quantity) || 0,
                                 category: String(catalogItem?.category || '').toLowerCase(),
                                 npcPrice: Number(catalogItem?.npcPrice) || 0,
+                                icon: catalogItem?.icon || catalogItem?.image || catalogItem?.sprite || '',
                                 locked: isNativeLocked(entry)
                             };
                         }).filter(item => item.qty > 0 && item.npcPrice > 0)
@@ -4072,7 +4184,7 @@
                 const isProtected = Boolean(protectionReason);
                 const row = document.createElement('label');
                 row.className = `hunt-sell-row${isProtected ? ' protected' : ''}`;
-                row.style.gridTemplateColumns = 'auto 1fr 90px auto';
+                row.style.gridTemplateColumns = 'auto 30px minmax(0, 1fr) 90px auto';
 
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
@@ -4082,6 +4194,17 @@
                 checkbox.dataset.unitPrice = String(item.npcPrice);
 
                 const name = document.createElement('span');
+                name.style.cssText = 'min-width:0;';
+                const itemIcon = document.createElement('img');
+                itemIcon.className = 'hunt-item-sell-icon';
+                itemIcon.src = normalizeGameItemIcon(
+                    item.icon
+                    || globalItemApiData.get(String(item.itemId))?.icon
+                    || globalItemApiData.get(item.name.toLowerCase())?.icon
+                    || ''
+                );
+                itemIcon.alt = '';
+                itemIcon.addEventListener('error', () => itemIcon.remove(), { once: true });
                 name.textContent = `${item.name} (${item.qty.toLocaleString('pt-BR')}) · 💲${item.npcPrice.toLocaleString('pt-BR')}`;
 
                 const quantity = document.createElement('input');
@@ -4107,7 +4230,7 @@
                         updateSaleSummary();
                     } catch (error) { showWindowMessage(backdrop.querySelector('.sell-confirm-modal'), error.message, true); }
                 });
-                row.append(checkbox, name, quantity, lock);
+                row.append(checkbox, itemIcon, name, quantity, lock);
                 list.appendChild(row);
             });
 
@@ -4215,7 +4338,7 @@
         const backdrop = document.createElement('div');
         backdrop.className = 'sell-confirm-backdrop hunt-sell-backdrop';
         backdrop.innerHTML = `
-            <div class="sell-confirm-modal" style="width:500px; max-width:94vw;">
+            <div class="sell-confirm-modal" style="width:600px; max-width:94vw;">
                 <div class="sell-confirm-title">
                     <span>🐾 Vender Pokémon</span>
                     <button class="hunt-items-open mk-bulk-btn" type="button" style="margin-left:auto;">🎒 Itens</button>
@@ -4286,7 +4409,8 @@
                 const protectedPoke = Boolean(isNativeLocked(poke) || poke.shiny || poke.market || poke.listed);
                 const row = document.createElement('label');
                 row.className = `hunt-sell-row${protectedPoke ? ' protected' : ''}`;
-                row.style.gridTemplateColumns = 'auto 1fr auto auto';
+                const showPokemonSellIcon = preferenceEnabled(STORAGE_SHOW_POKEMON_SELL_ICON);
+                row.style.gridTemplateColumns = showPokemonSellIcon ? 'auto 30px minmax(0, 1fr) auto auto' : 'auto minmax(0, 1fr) auto auto';
                 row.dataset.searchName = String(poke.name || '').toLocaleLowerCase();
                 row.dataset.shiny = poke.shiny ? 'true' : 'false';
                 row.dataset.iv = String(Number(poke.ivTotal) || 0);
@@ -4298,6 +4422,21 @@
                 checkbox.dataset.pokeId = String(poke.id);
                 checkbox.dataset.value = String(poke.sellValue || 0);
 
+                let pokemonIcon = null;
+                if (showPokemonSellIcon) {
+                    const iconUrl = getPokemonIconUrl(poke.speciesId);
+                    if (iconUrl) {
+                        pokemonIcon = document.createElement('img');
+                        pokemonIcon.className = 'hunt-pokemon-sell-icon';
+                        pokemonIcon.src = iconUrl;
+                        pokemonIcon.alt = '';
+                        pokemonIcon.addEventListener('error', () => {
+                            pokemonIcon.remove();
+                            row.style.gridTemplateColumns = 'auto minmax(0, 1fr) auto auto';
+                        }, { once: true });
+                    }
+                }
+
                 const name = document.createElement('span');
                 const flags = [
                     poke.shiny ? '✨' : '',
@@ -4305,7 +4444,20 @@
                     (poke.market || poke.listed) ? '🏷️' : ''
                 ].filter(Boolean).join(' ');
                 const quality = formatPokemonQualityWithPotential(poke.quality, poke.ivTotal, poke.shiny);
-                name.textContent = `${poke.name || `Pokémon ${poke.speciesId}`} · IV ${poke.ivTotal ?? '—'} · ${quality} ${flags}`;
+                name.append(
+                    document.createTextNode(`${poke.name || `Pokémon ${poke.speciesId}`} · Nv ${poke.level ?? '—'} · IV ${poke.ivTotal ?? '—'} · `)
+                );
+                const rarityInfo = getPokemonQualityInfo(poke.quality);
+                if (rarityInfo) {
+                    const rarity = document.createElement('span');
+                    rarity.textContent = quality;
+                    rarity.style.color = rarityInfo.color;
+                    rarity.style.fontWeight = '800';
+                    name.append(rarity);
+                } else {
+                    name.append(document.createTextNode(quality));
+                }
+                name.append(document.createTextNode(` ${flags}`));
 
                 const value = document.createElement('strong');
                 value.textContent = `💲${Number(poke.sellValue).toLocaleString('pt-BR')}`;
@@ -4324,7 +4476,9 @@
                         updateSummary();
                     } catch (error) { showWindowMessage(backdrop.querySelector('.sell-confirm-modal'), error.message, true); }
                 });
-                row.append(checkbox, name, value, lock);
+                row.append(checkbox);
+                if (pokemonIcon) row.append(pokemonIcon);
+                row.append(name, value, lock);
                 list.appendChild(row);
             });
 
@@ -4652,10 +4806,33 @@
                 const offerOnly = Boolean(entry.offerOnly || price <= 0);
                 const currency = normalizeMarketCurrency(entry.currency || entry.currencyType || ref.currency || ref.currencyType);
                 const currencyIcon = currency === 'DIAMONDS' ? '💎' : '💲';
+                const isPokemon = entry.kind === 'pokemon' || activeCategory === 'Pokemon';
+                const pokemonIconUrl = isPokemon
+                    ? (getPokemonIconUrl(entry.speciesId ?? ref.speciesId ?? entry.pokeId ?? ref.pokeId)
+                        || getPokemonIconUrlByName(name))
+                    : '';
+                const itemIconHTML = isPokemon ? '' : getMarketItemIconHTML(name, entry, ref, activeCategory);
                 row.innerHTML = `
-                    <div><b>${escapeHTML(name)}</b>${details ? `<small style="display:block;color:#90cdf4;margin-top:2px;">${escapeHTML(details)}</small>` : ''}${statText ? `<small style="display:block;color:#a0aec0;margin-top:2px;">${escapeHTML(statText)}</small>` : ''}</div>
+                    <div style="display:flex;align-items:center;gap:9px;min-width:0;">${pokemonIconUrl ? `<img class="market-pokemon-icon" src="${escapeHTML(pokemonIconUrl)}" alt="">` : itemIconHTML}<span style="min-width:0;"><b>${escapeHTML(name)}</b>${details ? `<small style="display:block;color:#90cdf4;margin-top:2px;">${escapeHTML(details)}</small>` : ''}${statText ? `<small style="display:block;color:#a0aec0;margin-top:2px;">${escapeHTML(statText)}</small>` : ''}</span></div>
                     <span style="color:#a0aec0;">${tr('quantity')}: <b style="color:#e2e8f0;">${quantity.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}</b></span>
                     <b style="color:#f6c453;">${offerOnly ? tr('offerOnly') : `${currencyIcon} ${price.toLocaleString(getGameLanguage() === 'pt' ? 'pt-BR' : 'en-US')}`}</b>`;
+                row.querySelector('.market-pokemon-icon')?.addEventListener('error', event => event.currentTarget.remove(), { once: true });
+                row.querySelector('.market-item-icon')?.addEventListener('error', event => {
+                    const icon = event.currentTarget;
+                    let pendingSources = [];
+                    try { pendingSources = JSON.parse(icon.dataset.iconFallbacks || '[]'); } catch { pendingSources = []; }
+                    const nextSource = pendingSources.shift();
+                    if (nextSource) {
+                        icon.dataset.iconFallbacks = JSON.stringify(pendingSources);
+                        icon.src = nextSource;
+                        return;
+                    }
+                    const fallback = document.createElement('span');
+                    fallback.className = 'market-item-emoji';
+                    fallback.setAttribute('aria-hidden', 'true');
+                    fallback.textContent = /stone/i.test(name) ? '🪨' : '🌿';
+                    icon.replaceWith(fallback);
+                });
                 const buyButton = document.createElement('button');
                 const quantityInput = document.createElement('input');
                 quantityInput.type = 'number';
@@ -5315,6 +5492,32 @@
         });
     }
 
+    async function injectMarkProductIcons(mkWindow) {
+        const buyTab = Array.from(mkWindow.querySelectorAll('.mk-tab'))
+            .some(tab => tab.classList.contains('on') && /Comprar|Buy/i.test(tab.textContent));
+        const rows = Array.from(mkWindow.querySelectorAll('.mk-row')).filter(row => row.querySelector('.mk-name'));
+        if (!buyTab || !rows.length) return;
+        let catalog;
+        try { catalog = await loadMarkCatalog(); } catch { return; }
+        rows.forEach(row => {
+            if (row.querySelector('.script-mark-product-icon, .mk-ico, .mk-icon, img')) return;
+            const name = row.querySelector('.mk-name')?.textContent?.trim();
+            const product = catalog.balls?.find(item => item.name === name)
+                || catalog.items?.find(item => item.name === name);
+            if (!product) return;
+            const iconSource = product.icon || product.iconUrl || product.image || product.sprite;
+            if (!iconSource) return;
+            const icon = document.createElement('img');
+            icon.className = 'script-mark-product-icon';
+            icon.src = normalizeGameItemIcon(iconSource);
+            icon.alt = '';
+            icon.addEventListener('error', () => icon.remove(), { once: true });
+            const info = row.querySelector('.mk-info');
+            if (info?.parentElement === row) row.insertBefore(icon, info);
+            else row.querySelector('.mk-name')?.before(icon);
+        });
+    }
+
     async function injectMarkOwnedQuantities(mkWindow) {
         const buyTab = Array.from(mkWindow.querySelectorAll('.mk-tab'))
             .some(tab => tab.classList.contains('on') && /Comprar|Buy/i.test(tab.textContent));
@@ -5441,6 +5644,7 @@
         const mkWindow = findNativeMarkWindow();
         if (!mkWindow) return;
 
+        injectMarkProductIcons(mkWindow);
         injectMarkBuyQuantities(mkWindow);
         injectMarkOwnedQuantities(mkWindow);
         injectMarkQualityMultiSelect(mkWindow);
@@ -5879,10 +6083,18 @@
     }
 
     let huntAnalyzerRenderRefreshPending = false;
-    function refreshHuntAnalyzerGameRender() {
+    let lastHuntAnalyzerRenderRefreshAt = 0;
+    // Pedir o re-render a cada tick do observer criava um ciclo que se alimentava
+    // sozinho: o render mexia no DOM, o observer disparava e pedia outro render, umas
+    // quatro vezes por segundo enquanto o analisador estivesse aberto. O intervalo
+    // minimo corta esse ciclo; voltar para a aba ainda forca a atualizacao na hora.
+    const HUNT_ANALYZER_RENDER_REFRESH_INTERVAL_MS = 4000;
+    function refreshHuntAnalyzerGameRender({ force = false } = {}) {
         if (huntAnalyzerRenderRefreshPending || document.hidden) return;
+        if (!force && Date.now() - lastHuntAnalyzerRenderRefreshAt < HUNT_ANALYZER_RENDER_REFRESH_INTERVAL_MS) return;
         if (!document.querySelector('.ha-window:not(.ha-compare-modal)')) return;
         huntAnalyzerRenderRefreshPending = true;
+        lastHuntAnalyzerRenderRefreshAt = Date.now();
         setTimeout(() => {
             try {
                 const event = new Event('visibilitychange');
@@ -5895,9 +6107,9 @@
     }
 
     document.addEventListener('visibilitychange', event => {
-        if (!event.piwQolRenderRefresh && !document.hidden) refreshHuntAnalyzerGameRender();
+        if (!event.piwQolRenderRefresh && !document.hidden) refreshHuntAnalyzerGameRender({ force: true });
     });
-    window.addEventListener('focus', refreshHuntAnalyzerGameRender);
+    window.addEventListener('focus', () => refreshHuntAnalyzerGameRender({ force: true }));
 
     function showCompareModal() {
         const curr = currentHuntSnapshot || { defeated: 0, timeText: '0s', balance: 0, balHour: 0, xpHour: 0, killsHour: 0, xpGained: 0, locName: 'Nenhuma' };
@@ -6213,6 +6425,10 @@
     function findCaptureLogWindow() {
         const nativeWindow = document.querySelector('.clog-window');
         if (nativeWindow) return nativeWindow;
+        // Sem nenhuma .clog-row no documento nao ha o que anotar, e a busca por texto
+        // abaixo percorre todos os nos do body. Rodava a cada tick do observer so para
+        // nao encontrar nada, porque a janela de capturas fica fechada quase sempre.
+        if (!document.querySelector('.clog-row')) return null;
         const titlePattern = /(?:log\s*de\s*capturas|capture\s*log)/i;
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         let titleNode = null;
