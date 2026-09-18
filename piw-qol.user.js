@@ -54,6 +54,7 @@
             return;
         }
         lastSocketMessageAt = Date.now();
+        if (isBossSignalType(message?.type)) markBossContext('mensagem do jogo');
         if (isHuntSocketMessage(message)) {
             lastHuntSocketActivityAt = Date.now();
         }
@@ -140,6 +141,56 @@
     let lastHuntNameRefreshAt = 0;
     let missingSlugLogged = false;
 
+    // O script não conhece o protocolo da boss, então qualquer mensagem cujo *tipo*
+    // fale em boss/raid conta como sinal. A checagem é só no tipo, nunca no corpo:
+    // itens como "Bronze Boss Token" aparecem no inventário e no mercado e marcariam
+    // uma boss que não está acontecendo.
+    const BOSS_SIGNAL_PATTERN = /boss|raid/i;
+    // Anúncios, rankings e listas de boss chegam para todo mundo o tempo todo, mesmo
+    // para quem está só caçando. Sem esta exclusão, uma dessas mensagens desligaria o
+    // auto-reconnect de um minuto em um minuto sem que nenhuma luta existisse.
+    const BOSS_BROADCAST_PATTERN = /rank|chat|announ|notif|list|shop|market|token|reward|histor|log/i;
+    // Só marcadores de região da interface (`data-guide`, o padrão que o jogo usa em
+    // capture-bar, dock-map e player-level) e janelas de luta. Um `[class*="boss"]`
+    // solto pegaria o ícone de um Boss Token aberto no inventário.
+    const BOSS_DOM_SELECTOR = [
+        '[data-guide*="boss" i]',
+        '[data-guide*="raid" i]',
+        '.boss-window',
+        '.boss-ui',
+        '.boss-battle',
+        '.raid-window',
+        '.raid-ui'
+    ].join(',');
+    // Uma boss que termine de um jeito que não observamos não pode desligar o watchdog
+    // para sempre: o estado expira sozinho depois de um minuto sem nenhum sinal.
+    const BOSS_CONTEXT_TTL_MS = 60000;
+    let bossContextUntil = 0;
+
+    function markBossContext(source) {
+        const wasActive = bossContextUntil > Date.now();
+        bossContextUntil = Date.now() + BOSS_CONTEXT_TTL_MS;
+        if (!wasActive && isAutoReconnectActive()) {
+            logAutoReconnectStatus(`Boss detectada (${source}); em espera até a luta terminar.`);
+        }
+    }
+
+    function isBossSignalType(type) {
+        const clean = String(type || '');
+        return BOSS_SIGNAL_PATTERN.test(clean) && !BOSS_BROADCAST_PATTERN.test(clean);
+    }
+
+    function isBossContext() {
+        if (bossContextUntil > Date.now()) return true;
+        // A varredura no DOM só acontece quando não há sinal recente do socket, para
+        // pegar a boss de quem abriu a página com a luta já em andamento.
+        if (document.querySelector(BOSS_DOM_SELECTOR)) {
+            markBossContext('interface');
+            return true;
+        }
+        return false;
+    }
+
     function isHuntSocketMessage(message) {
         return HUNT_MESSAGE_TYPES.has(String(message?.type || '')) || isHuntProgressMessage(message);
     }
@@ -196,6 +247,7 @@
         } catch {
             return;
         }
+        if (isBossSignalType(message?.type)) markBossContext('ação do jogador');
         if (message?.type === 'enter-hunt' && message.slug) {
             rememberHuntSlug(message.slug);
             lastHuntSocketActivityAt = Date.now();
@@ -211,7 +263,7 @@
     // socket direto (sendGameMessage), então passa pelo mesmo patch de envio — por
     // isso nada aqui zera o slug lembrado.
     async function rejoinCurrentHunt(reason) {
-        if (autoReconnectInProgress) return false;
+        if (autoReconnectInProgress || isBossContext()) return false;
         // A trava e o cooldown são marcados antes de qualquer await: resolver o slug
         // pode esperar o fetch dos marcadores do mapa, e nessa janela o intervalo de
         // um segundo dispararia outras reentradas em paralelo.
@@ -256,6 +308,14 @@
             return;
         }
         if (!isAutoReconnectActive() || autoReconnectInProgress) return;
+        // Numa boss o `leave-hunt` abandonaria a luta — e o token gasto nela. O
+        // watchdog inteiro fica em espera, inclusive o reload por socket fechado, e o
+        // relógio de silêncio é zerado para a luta terminar com os 10 segundos cheios.
+        if (isBossContext()) {
+            lastHuntSocketActivityAt = Date.now();
+            socketDownSince = 0;
+            return;
+        }
         const now = Date.now();
         // A verificação roda a cada segundo, mas o nome da hunt muda raramente: relê o
         // HUD só de cinco em cinco segundos para não gravar no localStorage a cada tick.
@@ -1186,17 +1246,35 @@
         }
         html.script-custom-scrollbars *::-webkit-scrollbar-thumb:hover { background: rgba(230, 205, 142, .58); background-clip: padding-box; }
         .promo-overlay { display: none !important; }
+        #script-sidebar {
+            position: fixed; left: 8px; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            background: rgba(20, 16, 10, .85);
+            border: 2px solid rgb(120, 90, 40); border-radius: 10px;
+            padding: 8px 6px; z-index: 9000;
+            backdrop-filter: blur(4px);
+        }
         #dock-btn-quick-tp, #dock-btn-shops, #dock-btn-depot {
             background: transparent;
             border: 0;
             box-shadow: none;
             display: inline-flex; align-items: center; justify-content: center;
+            width: 36px; height: 36px; border-radius: 8px; cursor: pointer;
+            transition: background .15s;
+        }
+        #dock-btn-quick-tp:hover, #dock-btn-shops:hover, #dock-btn-depot:hover {
+            background: rgba(255,255,255,.12);
         }
         #dock-btn-quick-tp[hidden] { display: none !important; }
         #dock-btn-quick-tp { color: #ffcc00; font-size: 16px; font-weight: bold; }
         #dock-btn-shops { color: #9ae6b4; font-size: 15px; }
         #dock-btn-depot { color: #90cdf4; font-size: 15px; }
-        .script-shop-wrap .poke-menu[hidden] { display: none !important; }
+        .script-sidebar-wrap { position: relative; display: flex; align-items: center; }
+        .script-sidebar-wrap .poke-menu[hidden] { display: none !important; }
+        .script-sidebar-wrap .poke-menu {
+            position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+            margin-left: 8px; white-space: nowrap;
+        }
         @media (max-width: 720px) {
             #custom-hunts-filter-bar { grid-template-columns: 1fr !important; }
         }
@@ -2200,83 +2278,87 @@
     }
 
     function injectQuickTPButton() {
-        const gameDock = document.querySelector('nav.game-dock');
-        if (gameDock) {
-            const mapBtn = gameDock.querySelector('button[data-guide="dock-map"]');
-            let tpBtn = document.getElementById('dock-btn-quick-tp');
-            if (!tpBtn) {
-                tpBtn = document.createElement('button');
-                tpBtn.id = 'dock-btn-quick-tp';
-                tpBtn.className = 'dock-btn';
-                tpBtn.type = 'button';
-                tpBtn.addEventListener('click', handleNavQuickTP);
-                tpBtn.addEventListener('contextmenu', event => {
-                    if (getNavTpMode() !== 'fav') return;
-                    event.preventDefault();
-                    showPrimaryFavoriteSelector({ teleportAfterSelection: false });
-                });
-                if (mapBtn && mapBtn.nextSibling) gameDock.insertBefore(tpBtn, mapBtn.nextSibling);
-                else gameDock.appendChild(tpBtn);
-                updateNavButtonAppearance();
-            }
+        let sidebar = document.getElementById('script-sidebar');
+        if (!sidebar) {
+            sidebar = document.createElement('div');
+            sidebar.id = 'script-sidebar';
+            document.body.appendChild(sidebar);
+        }
 
-            if (!document.getElementById('dock-btn-shops')) {
-                const shopWrap = document.createElement('span');
-                shopWrap.className = 'dock-poke-wrap script-shop-wrap';
-                const shopsButton = document.createElement('button');
-                shopsButton.id = 'dock-btn-shops';
-                shopsButton.className = 'dock-btn';
-                shopsButton.type = 'button';
-                shopsButton.textContent = '🏪';
-                shopsButton.title = tr('shops');
+        let tpBtn = document.getElementById('dock-btn-quick-tp');
+        if (!tpBtn) {
+            tpBtn = document.createElement('button');
+            tpBtn.id = 'dock-btn-quick-tp';
+            tpBtn.className = 'dock-btn';
+            tpBtn.type = 'button';
+            tpBtn.addEventListener('click', handleNavQuickTP);
+            tpBtn.addEventListener('contextmenu', event => {
+                if (getNavTpMode() !== 'fav') return;
+                event.preventDefault();
+                showPrimaryFavoriteSelector({ teleportAfterSelection: false });
+            });
+            sidebar.appendChild(tpBtn);
+            updateNavButtonAppearance();
+        } else if (tpBtn.parentElement !== sidebar) {
+            sidebar.appendChild(tpBtn);
+        }
 
-                const menu = document.createElement('div');
-                menu.className = 'poke-menu script-shop-menu';
-                menu.setAttribute('role', 'menu');
-                menu.hidden = true;
-                const rebuildMenu = () => {
-                    menu.innerHTML = '';
-                    const addItem = (label, handler) => {
-                        const item = document.createElement('button');
-                        item.type = 'button';
-                        item.className = 'poke-menu-item';
-                        item.setAttribute('role', 'menuitem');
-                        item.textContent = label;
-                        item.addEventListener('click', event => {
-                            event.stopPropagation();
-                            menu.hidden = true;
-                            handler();
-                        });
-                        menu.appendChild(item);
-                    };
-                    addItem(`🌐 ${tr('globalMarket')}`, showGlobalMarketWindow);
-                    addItem(`🔴 ${tr('ballShop')}`, showPortableBallShop);
-                    addItem(`💰 ${tr('sellItems')}`, showHuntSellWindow);
+        if (!document.getElementById('dock-btn-shops')) {
+            const shopWrap = document.createElement('span');
+            shopWrap.className = 'dock-poke-wrap script-sidebar-wrap';
+            const shopsButton = document.createElement('button');
+            shopsButton.id = 'dock-btn-shops';
+            shopsButton.className = 'dock-btn';
+            shopsButton.type = 'button';
+            shopsButton.textContent = '🏪';
+            shopsButton.title = tr('shops');
+
+            const menu = document.createElement('div');
+            menu.className = 'poke-menu script-shop-menu';
+            menu.setAttribute('role', 'menu');
+            menu.hidden = true;
+            const rebuildMenu = () => {
+                menu.innerHTML = '';
+                const addItem = (label, handler) => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'poke-menu-item';
+                    item.setAttribute('role', 'menuitem');
+                    item.textContent = label;
+                    item.addEventListener('click', event => {
+                        event.stopPropagation();
+                        menu.hidden = true;
+                        handler();
+                    });
+                    menu.appendChild(item);
                 };
-                shopsButton.addEventListener('click', event => {
-                    event.stopPropagation();
-                    const willOpen = menu.hidden;
-                    document.querySelectorAll('.script-shop-menu').forEach(other => { other.hidden = true; });
-                    if (willOpen) rebuildMenu();
-                    menu.hidden = !willOpen;
-                });
-                document.addEventListener('click', event => {
-                    if (!shopWrap.contains(event.target)) menu.hidden = true;
-                });
-                shopWrap.append(shopsButton, menu);
-                tpBtn.after(shopWrap);
-            }
+                addItem(`🌐 ${tr('globalMarket')}`, showGlobalMarketWindow);
+                addItem(`🔴 ${tr('ballShop')}`, showPortableBallShop);
+                addItem(`💰 ${tr('sellItems')}`, showHuntSellWindow);
+            };
+            shopsButton.addEventListener('click', event => {
+                event.stopPropagation();
+                const willOpen = menu.hidden;
+                document.querySelectorAll('.script-shop-menu').forEach(other => { other.hidden = true; });
+                if (willOpen) rebuildMenu();
+                menu.hidden = !willOpen;
+            });
+            document.addEventListener('click', event => {
+                if (!shopWrap.contains(event.target)) menu.hidden = true;
+            });
+            shopWrap.append(shopsButton, menu);
+            sidebar.appendChild(shopWrap);
+        }
 
-            if (!document.getElementById('dock-btn-depot')) {
-                const depotButton = document.createElement('button');
-                depotButton.id = 'dock-btn-depot';
-                depotButton.className = 'dock-btn';
-                depotButton.type = 'button';
-                depotButton.textContent = '📦';
-                depotButton.title = 'Depot';
-                depotButton.addEventListener('click', showPortableDepot);
-                document.getElementById('dock-btn-shops')?.closest('.script-shop-wrap')?.after(depotButton);
-            }
+        if (!document.getElementById('dock-btn-depot')) {
+            const depotButton = document.createElement('button');
+            depotButton.id = 'dock-btn-depot';
+            depotButton.className = 'dock-btn';
+            depotButton.type = 'button';
+            depotButton.textContent = '📦';
+            depotButton.title = 'Depot';
+            depotButton.addEventListener('click', showPortableDepot);
+            sidebar.appendChild(depotButton);
         }
     }
 
@@ -2396,7 +2478,7 @@
                         toggleRow({
                             className: 'cfg-auto-reconnect', checked: isAutoReconnectActive(),
                             title: 'Auto-reconnect da hunt',
-                            description: 'Quando a hunt fica 10 segundos sem responder, sai e entra de novo na mesma hunt pelo WebSocket, sem passar por outra hunt.'
+                            description: 'Quando a hunt fica 10 segundos sem responder, sai e entra de novo na mesma hunt pelo WebSocket, sem passar por outra hunt. Fica em espera durante bosses.'
                         }),
                         prefToggle('cfg-compare-window', STORAGE_COMPARE_WINDOW, 'Comparação de hunts', 'Exibe a janela móvel e redimensionável de comparação.'),
                         sublistRow({

@@ -354,6 +354,8 @@ Antes de reentrar, o script confere onde você está: o nome exibido no HUD é t
 
 Se o lugar não for reconhecido como hunt, o script não envia nada e avisa uma vez no console.
 
+**Durante uma boss o recurso fica em espera.** O `leave-hunt` abandonaria a luta e o token gasto nela, então qualquer mensagem de boss do jogo — ou a janela da luta na tela — suspende o watchdog, inclusive o reload por conexão caída. A espera acaba sozinha um minuto depois do último sinal da boss, para que uma luta que termine de um jeito inesperado não deixe o auto-reconnect desligado. Anúncios, rankings e itens com "Boss" no nome não contam como luta.
+
 Quando o próprio WebSocket cai não há como enviar nada: nesse caso o script espera 45 segundos pela reconexão do jogo e, se ela não vier, recarrega a página.
 
 O andamento é registrado no console do navegador com o prefixo `[PIW-QOL] Auto-reconnect:`, útil para entender o que aconteceu enquanto você estava longe.
